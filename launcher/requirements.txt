@@ -1,0 +1,6 @@
+# Smart Cushion Fog Node Launcher – Additional Dependencies
+# Install:  pip install -r launcher/requirements.txt
+
+customtkinter>=5.2.0
+paho-mqtt>=1.6.1
+websockets>=12.0.0
