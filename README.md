@@ -217,9 +217,20 @@ Open `tools/ws_monitor.html` in your browser and connect to `ws://localhost:8765
 
 ### Step 5 – Simulate sensor data
 
+To avoid polluting your global Python environment, it is highly recommended to run the simulator either inside a virtual environment or directly via Docker.
+
+**Option A: Virtual Environment (Recommended for testing)**
 ```bash
+python -m venv venv
+source venv/bin/activate
 pip install paho-mqtt python-dotenv
 python tools/simulate_esp32.py --scenario mixed --interval 0.5
+```
+
+**Option B: Via Docker (No local installation needed)**
+```bash
+# Run the simulator using the docker compose service
+docker compose run --rm fog-node python tools/simulate_esp32.py --scenario mixed --interval 0.5
 ```
 
 ---
