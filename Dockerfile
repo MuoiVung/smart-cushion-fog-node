@@ -30,6 +30,7 @@ COPY . .
 
 # ── Security: run as non-root user ────────────────────────────────────────
 RUN adduser --disabled-password --gecos '' --uid 1001 foguser \
+    && mkdir -p /app/logs /app/ai/models \
     && chown -R foguser:foguser /app
 USER foguser
 
