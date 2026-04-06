@@ -1,0 +1,60 @@
+# =============================================================
+# Smart Cushion Fog Node – .gitignore
+# IMPORTANT: This project stores secrets in .env – never commit it!
+# =============================================================
+
+# ── Secrets & Credentials (NEVER commit these) ──────────────
+.env
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+certs/
+
+# ── Mosquitto data (generated at runtime) ─────────────────
+mosquitto/data/
+mosquitto/log/
+mosquitto/config/passwd
+
+# ── Trained AI model weights (too large / sensitive) ──────
+ai/models/*.pt
+ai/models/*.pth
+ai/models/*.onnx
+ai/models/*.bin
+
+# ── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+pip-selfcheck.json
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ───────────────────────────────────
+env/
+venv/
+.venv/
+ENV/
+
+# ── Logs ──────────────────────────────────────────────────
+logs/
+*.log
+
+# ── Testing ───────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ── IDE & OS ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
