@@ -1,0 +1,90 @@
+# =========================================================
+# Smart Cushion Fog Node – Docker Compose
+#
+# Services:
+#   mosquitto  – Mosquitto MQTT broker (local Edge <-> Fog)
+#   fog-node   – Smart Cushion Python application
+#
+# Usage:
+#   1. Run setup script: ./scripts/generate_mqtt_credentials.sh
+#   2. Start:  docker compose up
+#   3. Stop:   docker compose down
+#
+# WebSocket is exposed on host port 8765.
+# MQTT is exposed on host port 1883 (for the ESP32 to connect).
+# =========================================================
+
+services:
+
+  # ── Mosquitto MQTT Broker ────────────────────────────────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: smart-cushion-mosquitto
+    restart: unless-stopped
+
+    ports:
+      # Expose MQTT to the local network so the ESP32 can connect.
+      # The ESP32 should point to the Fog Node's LAN IP on port 1883.
+      - "1883:1883"
+
+    volumes:
+      # Mosquitto config (includes mosquitto.conf + passwd file)
+      - ./mosquitto/config:/mosquitto/config:ro
+      # Persistent session data & logs (written by Mosquitto at runtime)
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+
+    healthcheck:
+      test: ["CMD", "mosquitto_pub", "-h", "localhost", "-t", "healthcheck", "-m", "ping", "-u", "${MQTT_USERNAME}", "-P", "${MQTT_PASSWORD}"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+    networks:
+      - cushion-net
+
+  # ── Fog Node Application ─────────────────────────────────────────────────
+  fog-node:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: smart-cushion-fog
+    restart: unless-stopped
+
+    # Load all settings from the .env file (secrets never in compose file)
+    env_file:
+      - .env
+
+    # Override MQTT_HOST to use the Docker service name (internal DNS)
+    environment:
+      - MQTT_HOST=mosquitto
+
+    ports:
+      # WebSocket server – clients on the LAN connect here
+      - "8765:8765"
+
+    volumes:
+      # Mount the AI model directory so weights can be swapped without rebuild
+      - ./ai/models:/app/ai/models:ro
+      # Mount certs directory for AWS IoT Core (if CLOUD_ENABLED=true)
+      - ./certs:/app/certs:ro
+      # Persist logs
+      - fog_logs:/app/logs
+
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+
+    networks:
+      - cushion-net
+
+# ── Named volumes ──────────────────────────────────────────────────────────
+volumes:
+  mosquitto_data:
+  mosquitto_log:
+  fog_logs:
+
+# ── Internal network ───────────────────────────────────────────────────────
+networks:
+  cushion-net:
+    driver: bridge
