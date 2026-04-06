@@ -110,7 +110,7 @@ class WebSocketServer:
 
         # ── Authentication ────────────────────────────────────────────────
         if self._settings.ws_auth_token:
-            token = websocket.request_headers.get("Authorization", "")
+            token = websocket.request.headers.get("Authorization", "")
             expected = f"Bearer {self._settings.ws_auth_token}"
             if token != expected:
                 logger.warning(

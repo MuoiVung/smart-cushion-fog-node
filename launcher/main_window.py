@@ -122,7 +122,7 @@ class FogLauncherApp(ctk.CTk):
             on_log=self._log_queue.put,
         )
         self._mqtt_monitor = MQTTMonitor(
-            host=_read_env("MQTT_HOST", "localhost"),
+            host="localhost",
             port=int(_read_env("MQTT_PORT", "1883")),
             username=_read_env("MQTT_USERNAME", ""),
             password=_read_env("MQTT_PASSWORD", ""),
@@ -140,6 +140,7 @@ class FogLauncherApp(ctk.CTk):
         self._current_status: Optional[ServiceStatus] = None
         self._monitor_paused = False
         self._active_channel = CHANNELS[0]["key"]
+        self._monitors_started = False   # Guard: start monitors only once per Start
 
         self._build_ui()
         self._start_poll()
@@ -216,7 +217,7 @@ class FogLauncherApp(ctk.CTk):
             font=ctk.CTkFont(size=13, weight="bold"),
             fg_color=COLOR["green"],
             hover_color="#2ea043",
-            text_color="#0d1117",
+            text_color="#ffffff",
             corner_radius=8,
             height=40,
             command=self._on_start,
@@ -227,11 +228,9 @@ class FogLauncherApp(ctk.CTk):
             frame,
             text="■  Stop Services",
             font=ctk.CTkFont(size=13, weight="bold"),
-            fg_color=COLOR["surface"],
-            border_color=COLOR["red"],
-            border_width=1,
-            hover_color="#2d1a1a",
-            text_color=COLOR["red"],
+            fg_color="#cf222e",
+            hover_color="#a40e26",
+            text_color="#ffffff",
             corner_radius=8,
             height=40,
             command=self._on_stop,
@@ -357,20 +356,21 @@ class FogLauncherApp(ctk.CTk):
         # Title bar
         title_bar = ctk.CTkFrame(frame, fg_color="transparent")
         title_bar.grid(row=0, column=0, sticky="ew", padx=16, pady=(14, 0))
-        title_bar.grid_columnconfigure(4, weight=1)
+        # Empty column 5 acts as a spacer that pushes controls to the right
+        title_bar.grid_columnconfigure(5, weight=1)
 
         ctk.CTkLabel(
             title_bar, text="DATA MONITOR",
             font=ctk.CTkFont(size=10, weight="bold"),
             text_color=COLOR["muted"],
-        ).grid(row=0, column=0, sticky="w")
+        ).grid(row=0, column=0, sticky="w", padx=(0, 20))
 
         # Channel tab buttons
         self._tab_buttons: dict[str, ctk.CTkButton] = {}
         for i, ch in enumerate(CHANNELS, start=1):
             btn = ctk.CTkButton(
                 title_bar, text=ch["label"],
-                width=150, height=28,
+                width=140, height=28,
                 font=ctk.CTkFont(size=11),
                 corner_radius=6,
                 fg_color=COLOR["surface"],
@@ -380,12 +380,12 @@ class FogLauncherApp(ctk.CTk):
                 hover_color=COLOR["bg"],
                 command=lambda k=ch["key"]: self._select_channel(k),
             )
-            btn.grid(row=0, column=i, padx=(0 if i == 1 else 6, 0))
+            btn.grid(row=0, column=i, padx=4)
             self._tab_buttons[ch["key"]] = btn
 
         # Control buttons (right side)
         ctrl = ctk.CTkFrame(title_bar, fg_color="transparent")
-        ctrl.grid(row=0, column=5, padx=(12, 0), sticky="e")
+        ctrl.grid(row=0, column=6, padx=(12, 0), sticky="e")
 
         self._pause_btn = ctk.CTkButton(
             ctrl, text="⏸ Pause", width=80, height=28,
@@ -470,24 +470,28 @@ class FogLauncherApp(ctk.CTk):
             return
         self._start_btn.configure(state="disabled", text="Starting…")
         self._stop_btn.configure(state="normal")
+        self._monitors_started = False   # Reset so monitors re-attach on next Start
         self._docker.start()
-        # Delay MQTT/WS monitor start to give services time to boot
-        self.after(8000, self._start_monitors)
 
     def _on_stop(self) -> None:
         self._stop_btn.configure(state="disabled", text="Stopping…")
         self._mqtt_monitor.stop()
         self._ws_monitor.stop()
+        self._monitors_started = False
         self._docker.stop()
         self.after(4000, lambda: self._start_btn.configure(state="normal", text="▶  Start Services"))
         self.after(4000, lambda: self._stop_btn.configure(text="■  Stop Services"))
 
     def _start_monitors(self) -> None:
+        """(Re)start all monitors. Safe to call multiple times – guarded by _monitors_started."""
+        if self._monitors_started:
+            return
+        self._monitors_started = True
         self._mqtt_monitor.stop()
         self._ws_monitor.stop()
         self._mqtt_monitor.start()
         self._ws_monitor.start()
-        self._log_console("Monitors attached to running services")
+        self._log_console("✅ Monitors attached to running services")
 
     def _on_model_mode_change(self) -> None:
         mode = self._model_mode.get()
@@ -568,6 +572,14 @@ class FogLauncherApp(ctk.CTk):
     def _on_docker_status(self, status: ServiceStatus) -> None:
         """Called from DockerManager's polling thread – put in queue for UI."""
         self._current_status = status
+        # Auto-start monitors once BOTH services are healthy
+        if (
+            status.mosquitto == ServiceState.RUNNING
+            and status.fog_node == ServiceState.RUNNING
+            and not self._monitors_started
+        ):
+            # Schedule on main thread (this callback runs in a background thread)
+            self.after(0, self._start_monitors)
 
     # =========================================================================
     # Periodic UI update (runs on main thread)
