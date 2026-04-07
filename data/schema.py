@@ -36,38 +36,52 @@ class PostureLabel(str, Enum):
 
 class SensorReading(BaseModel):
     """
-    Raw sensor values from the ESP32.
+    Raw sensor values from the ESP32 hardware.
 
-    FSR sensors return 12-bit ADC values (0–4095 on ESP32).
-    We cap at 4095 to be flexible, but default ESP32 analogRead is 12-bit.
-    Temperature is from an IR sensor (MLX90614 or similar).
+    FSR sensors (FSR402 - Interlink Electronics):
+      - Return raw 12-bit ADC values via ESP32 analogRead() (range: 0–4095).
+      - 0    = no pressure / unloaded.
+      - 4095 = maximum pressure (ADC saturated).
+      - Typical seated values observed: ~2400–3100.
+
+    Temperature:
+      - Already converted to Celsius (°C) on the ESP32 before sending.
+      - Sensor: NTC thermistor or equivalent (e.g. DS18B20 / DHT22).
+      - Empty cushion ≈ room temperature (20–25 °C).
+      - Occupied cushion ≈ body surface temperature (32–37 °C).
+      - Person detection threshold in Preprocessor: 30.0 °C (configurable).
     """
-    fsr_front_left:  int   = Field(..., ge=0, le=4095, description="FSR front-left ADC value")
-    fsr_front_right: int   = Field(..., ge=0, le=4095, description="FSR front-right ADC value")
-    fsr_back_left:   int   = Field(..., ge=0, le=4095, description="FSR back-left ADC value")
-    fsr_back_right:  int   = Field(..., ge=0, le=4095, description="FSR back-right ADC value")
-    temperature:     float = Field(..., ge=-40.0, le=125.0, description="Object temperature °C")
+    fsr_front_left:  int   = Field(..., ge=0, le=4095, description="FSR402 front-left raw ADC (0–4095)")
+    fsr_front_right: int   = Field(..., ge=0, le=4095, description="FSR402 front-right raw ADC (0–4095)")
+    fsr_back_left:   int   = Field(..., ge=0, le=4095, description="FSR402 back-left raw ADC (0–4095)")
+    fsr_back_right:  int   = Field(..., ge=0, le=4095, description="FSR402 back-right raw ADC (0–4095)")
+    temperature:     float = Field(..., ge=-40.0, le=125.0, description="Surface temperature in °C (pre-converted on ESP32)")
 
 
 class RawMessage(BaseModel):
     """
     Full JSON payload published by the ESP32 to MQTT topic cushion/raw.
 
-    Example:
+    Real hardware example (FSR402 + NTC thermistor, person NOT seated):
         {
             "device_id":  "esp32-cushion-01",
-            "timestamp":  1712345678.123,
+            "timestamp":  115.265,
             "sensors": {
-                "fsr_front_left":  512,
-                "fsr_front_right": 498,
-                "fsr_back_left":   601,
-                "fsr_back_right":  587,
-                "temperature":     36.4
+                "fsr_front_left":  2788,
+                "fsr_front_right": 3052,
+                "fsr_back_left":   2590,
+                "fsr_back_right":  2428,
+                "temperature":     20.4
             }
         }
+
+    Notes:
+      - timestamp: seconds since ESP32 boot (millis()/1000), NOT Unix epoch.
+      - temperature 20.4 °C → below 30 °C threshold → person_detected = False.
+      - FSR values ~2400–3100 at rest (no weight) due to sensor baseline offset.
     """
     device_id: str
-    timestamp: float = Field(..., description="Unix timestamp (seconds) from ESP32")
+    timestamp: float = Field(..., description="Seconds since ESP32 boot (millis()/1000)")
     sensors:   SensorReading
 
 
