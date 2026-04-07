@@ -3,16 +3,16 @@ Sensor data preprocessor for the Smart Cushion Fog Node.
 
 Responsibilities:
   1. Detect human presence using total FSR pressure (sum of all 4 sensors).
-  2. Normalize raw FSR ADC values into a [0, 1] float vector suitable
-     for the PyTorch inference model.
+  2. Convert raw FSR pressure to relative percentages (0.0 to 1.0) so the
+     model is independent of the person's absolute body weight.
 
 Design notes:
   - Person detection uses total FSR sum, NOT temperature.
     Reason: the temperature sensor measures ambient room temperature (~20-25°C)
     and does NOT detect body heat, so it cannot reliably determine if someone
     is seated.
-  - FSR normalization is simple min-max scaling against the ADC full-scale
-    (0-4095 for ESP32 12-bit ADC).
+  - FSR feature extraction calculates relative proportion (each sensor / total pressure).
+    This makes the AI inference robust to different occupant weights.
   - The fsr_presence_threshold (default: 1000) should be tuned based on the
     observed empty-cushion FSR readings for your specific hardware.
 """
@@ -100,10 +100,12 @@ class Preprocessor:
 
     def extract_features(self, sensors: SensorReading) -> np.ndarray:
         """
-        Convert raw FSR ADC values into a normalised feature vector.
+        Convert raw FSR pressure into a weight-independent relative percentage vector.
 
-        The returned array has shape (4,) with values in [0.0, 1.0]:
+        The returned array has shape (4,) with values representing the percentage
+        of pressure on each sensor:
             [fsr_front_left, fsr_front_right, fsr_back_left, fsr_back_right]
+        The sum of the features will be exactly 1.0 if a person is seated.
 
         Args:
             sensors: Validated SensorReading from the ESP32.
@@ -121,11 +123,14 @@ class Preprocessor:
             dtype=np.float32,
         )
 
-        # Min-max normalise against full ADC scale
-        normalised = raw / _FSR_MAX
+        total_pressure = raw.sum()
+        if total_pressure > 0:
+            features = raw / total_pressure
+        else:
+            features = np.zeros(4, dtype=np.float32)
 
-        # Clip to [0, 1] as a safety guard against out-of-range readings
-        normalised = np.clip(normalised, 0.0, 1.0)
+        # Clip to [0, 1] as a safety guard
+        features = np.clip(features, 0.0, 1.0)
 
-        logger.debug(f"Features (normalised): {normalised}  total_raw={int(raw.sum())}")
-        return normalised
+        logger.debug(f"Features (relative %): {features}  total_raw={int(total_pressure)}")
+        return features

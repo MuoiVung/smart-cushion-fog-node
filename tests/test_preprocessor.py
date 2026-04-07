@@ -91,10 +91,12 @@ class TestFeatureExtraction:
         features = self.proc.extract_features(reading)
         np.testing.assert_array_equal(features, np.zeros(4, dtype=np.float32))
 
-    def test_full_scale_normalises_to_one(self):
-        reading = make_reading(fl=4095, fr=4095, bl=4095, br=4095)
+    def test_relative_percentage_equal_distibution(self):
+        # All sensors equal -> 25% (0.25) each
+        reading = make_reading(fl=4000, fr=4000, bl=4000, br=4000)
         features = self.proc.extract_features(reading)
-        np.testing.assert_allclose(features, np.ones(4, dtype=np.float32), atol=1e-5)
+        expected = np.array([0.25, 0.25, 0.25, 0.25], dtype=np.float32)
+        np.testing.assert_allclose(features, expected, atol=1e-5)
 
     def test_order_fl_fr_bl_br(self):
         """Verify the feature vector order matches [FL, FR, BL, BR]."""
