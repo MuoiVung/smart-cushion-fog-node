@@ -29,6 +29,11 @@ class Preprocessor:
     """
     Converts raw SensorReading objects into normalised feature vectors
     ready for the AI inference engine.
+
+    Hardware context:
+      - FSR402 sensors output raw ADC values (0–4095, 12-bit ESP32).
+      - Baseline (unloaded) observed at ~2400–3100 due to sensor + circuit offset.
+      - Temperature (pre-converted to °C on ESP32): ~20–25°C empty, ~32–37°C seated.
     """
 
     def __init__(self, temperature_threshold: float = 30.0) -> None:
@@ -62,7 +67,8 @@ class Preprocessor:
         if not present:
             logger.debug(
                 f"No person detected: temperature={sensors.temperature:.1f}°C "
-                f"(threshold={self._temp_threshold}°C)"
+                f"(threshold={self._temp_threshold}°C) "
+                f"– empty cushion ≈ room temp, seated ≈ 32–37°C"
             )
         return present
 
