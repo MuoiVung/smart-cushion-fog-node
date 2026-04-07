@@ -367,23 +367,23 @@ class FogLauncherApp(ctk.CTk):
             text_color=COLOR["muted"],
         ).grid(row=0, column=0, sticky="w", padx=(0, 20))
 
-        # Channel tab buttons
-        self._tab_buttons: dict[str, ctk.CTkButton] = {}
-        for i, ch in enumerate(CHANNELS, start=1):
-            btn = ctk.CTkButton(
-                title_bar, text=ch["label"],
-                width=140, height=28,
-                font=ctk.CTkFont(size=11),
-                corner_radius=6,
-                fg_color=COLOR["surface"],
-                border_width=1,
-                border_color=COLOR["muted"],
-                text_color=COLOR["muted"],
-                hover_color=COLOR["bg"],
-                command=lambda k=ch["key"]: self._select_channel(k),
-            )
-            btn.grid(row=0, column=i, padx=4)
-            self._tab_buttons[ch["key"]] = btn
+        # Channel selector (dropdown menu)
+        self._label_to_key = {ch["label"]: ch["key"] for ch in CHANNELS}
+        self._key_to_label = {ch["key"]: ch["label"] for ch in CHANNELS}
+        
+        self._channel_menu_var = ctk.StringVar(value=CHANNELS[0]["label"])
+        self._channel_menu = ctk.CTkOptionMenu(
+            title_bar,
+            values=[ch["label"] for ch in CHANNELS],
+            variable=self._channel_menu_var,
+            width=200, height=30,
+            font=ctk.CTkFont(size=12),
+            fg_color=COLOR["bg"],
+            button_color=COLOR["surface"],
+            button_hover_color=COLOR["muted"],
+            command=self._on_channel_menu_change,
+        )
+        self._channel_menu.grid(row=0, column=1, padx=4, sticky="w")
 
         # Control buttons (right side)
         ctrl = ctk.CTkFrame(title_bar, fg_color="transparent")
@@ -537,26 +537,26 @@ class FogLauncherApp(ctk.CTk):
 
         self._docker.restart_fog_node()
 
+    def _on_channel_menu_change(self, selected_label: str) -> None:
+        key = self._label_to_key.get(selected_label)
+        if key:
+            self._select_channel(key)
+
     def _select_channel(self, channel_key: str) -> None:
         self._active_channel = channel_key
+        
+        # Ensure dropdown matches (if called programmatically)
+        label = self._key_to_label.get(channel_key)
+        if label and hasattr(self, "_channel_menu_var"):
+            self._channel_menu_var.set(label)
+            
         for ch in CHANNELS:
             k = ch["key"]
-            panel  = self._monitor_panels[k]
-            btn = self._tab_buttons[k]
+            panel = self._monitor_panels[k]
             if k == channel_key:
                 panel.grid()
-                btn.configure(
-                    border_color=ch["color"],
-                    text_color=ch["color"],
-                    fg_color=COLOR["bg"],
-                )
             else:
                 panel.grid_remove()
-                btn.configure(
-                    border_color=COLOR["muted"],
-                    text_color=COLOR["muted"],
-                    fg_color=COLOR["surface"],
-                )
 
     def _on_toggle_pause(self) -> None:
         self._monitor_paused = not self._monitor_paused
