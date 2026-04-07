@@ -124,7 +124,7 @@ class InferenceEngine:
 
         Args:
             features: numpy float32 array of shape (4,) with values in [0, 1].
-                      Order: [fsr_top_left, fsr_top_right, fsr_bottom_left, fsr_bottom_right]
+                      Order: [fsr_front_left, fsr_front_right, fsr_back_left, fsr_back_right]
 
         Returns:
             Tuple of (PostureLabel, confidence) where confidence ∈ [0.0, 1.0].
@@ -178,9 +178,9 @@ class InferenceEngine:
         Heuristic posture classifier based on FSR pressure symmetry.
 
         Rationale:
-        - Left-leaning: significantly more pressure on left sensors (TL + BL).
-        - Right-leaning: significantly more pressure on right sensors (TR + BR).
-        - Slouching forward: significantly more pressure on front (TL + TR).
+        - Left-leaning: significantly more pressure on left sensors (FL + BL).
+        - Right-leaning: significantly more pressure on right sensors (FR + BR).
+        - Slouching forward: significantly more pressure on front (FL + FR).
         - Leaning back: significantly more pressure on rear (BL + BR).
         - Otherwise: pressure is relatively symmetric → correct posture.
 
@@ -189,7 +189,7 @@ class InferenceEngine:
         the INCORRECT_POSTURE_ALERT_THRESHOLD setting.
 
         Args:
-            features: [tl, tr, bl, br] normalised in [0, 1].
+            features: [fl, fr, bl, br] normalised in [0, 1].
 
         Returns:
             (PostureLabel, confidence) with confidence ∈ [0.35, 0.95].

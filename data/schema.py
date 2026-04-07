@@ -42,11 +42,11 @@ class SensorReading(BaseModel):
     We cap at 4095 to be flexible, but default ESP32 analogRead is 12-bit.
     Temperature is from an IR sensor (MLX90614 or similar).
     """
-    fsr_top_left:     int   = Field(..., ge=0, le=4095, description="FSR top-left ADC value")
-    fsr_top_right:    int   = Field(..., ge=0, le=4095, description="FSR top-right ADC value")
-    fsr_bottom_left:  int   = Field(..., ge=0, le=4095, description="FSR bottom-left ADC value")
-    fsr_bottom_right: int   = Field(..., ge=0, le=4095, description="FSR bottom-right ADC value")
-    temperature:      float = Field(..., ge=-40.0, le=125.0, description="Object temperature °C")
+    fsr_front_left:  int   = Field(..., ge=0, le=4095, description="FSR front-left ADC value")
+    fsr_front_right: int   = Field(..., ge=0, le=4095, description="FSR front-right ADC value")
+    fsr_back_left:   int   = Field(..., ge=0, le=4095, description="FSR back-left ADC value")
+    fsr_back_right:  int   = Field(..., ge=0, le=4095, description="FSR back-right ADC value")
+    temperature:     float = Field(..., ge=-40.0, le=125.0, description="Object temperature °C")
 
 
 class RawMessage(BaseModel):
@@ -58,11 +58,11 @@ class RawMessage(BaseModel):
             "device_id":  "esp32-cushion-01",
             "timestamp":  1712345678.123,
             "sensors": {
-                "fsr_top_left":     512,
-                "fsr_top_right":    498,
-                "fsr_bottom_left":  601,
-                "fsr_bottom_right": 587,
-                "temperature":      36.4
+                "fsr_front_left":  512,
+                "fsr_front_right": 498,
+                "fsr_back_left":   601,
+                "fsr_back_right":  587,
+                "temperature":     36.4
             }
         }
     """

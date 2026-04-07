@@ -404,10 +404,10 @@
           <text x="90" y="100" text-anchor="middle" fill="rgba(255,255,255,0.08)" font-size="42" font-family="sans-serif">🪑</text>
         </svg>
         <div class="fsr-grid">
-          <div class="fsr-dot" id="dotTL" title="Top Left">TL</div>
-          <div class="fsr-dot" id="dotTR" title="Top Right">TR</div>
-          <div class="fsr-dot" id="dotBL" title="Bottom Left">BL</div>
-          <div class="fsr-dot" id="dotBR" title="Bottom Right">BR</div>
+          <div class="fsr-dot" id="dotFL" title="Front Left">FL</div>
+          <div class="fsr-dot" id="dotFR" title="Front Right">FR</div>
+          <div class="fsr-dot" id="dotBL" title="Back Left">BL</div>
+          <div class="fsr-dot" id="dotBR" title="Back Right">BR</div>
         </div>
       </div>
 
@@ -428,22 +428,22 @@
       <div class="card-title">Sensor Readings</div>
 
       <div class="sensor-row">
-        <div class="sensor-name">FSR Top-Left</div>
-        <div class="sensor-bar-wrap"><div class="sensor-bar" id="barTL" style="width:0%"></div></div>
-        <div class="sensor-val" id="valTL">—</div>
+        <div class="sensor-name">FSR Front-Left</div>
+        <div class="sensor-bar-wrap"><div class="sensor-bar" id="barFL" style="width:0%"></div></div>
+        <div class="sensor-val" id="valFL">—</div>
       </div>
       <div class="sensor-row">
-        <div class="sensor-name">FSR Top-Right</div>
-        <div class="sensor-bar-wrap"><div class="sensor-bar" id="barTR" style="width:0%"></div></div>
-        <div class="sensor-val" id="valTR">—</div>
+        <div class="sensor-name">FSR Front-Right</div>
+        <div class="sensor-bar-wrap"><div class="sensor-bar" id="barFR" style="width:0%"></div></div>
+        <div class="sensor-val" id="valFR">—</div>
       </div>
       <div class="sensor-row">
-        <div class="sensor-name">FSR Bottom-Left</div>
+        <div class="sensor-name">FSR Back-Left</div>
         <div class="sensor-bar-wrap"><div class="sensor-bar" id="barBL" style="width:0%"></div></div>
         <div class="sensor-val" id="valBL">—</div>
       </div>
       <div class="sensor-row">
-        <div class="sensor-name">FSR Bottom-Right</div>
+        <div class="sensor-name">FSR Back-Right</div>
         <div class="sensor-bar-wrap"><div class="sensor-bar" id="barBR" style="width:0%"></div></div>
         <div class="sensor-val" id="valBR">—</div>
       </div>
@@ -619,19 +619,19 @@ function updateSensors(s) {
     $(id + 'Bar').style.width = `${Math.min(100, (v / max) * 100)}%`;
     $(id + 'Val').textContent = unit === '°C' ? `${v.toFixed(1)}°C` : v;
   };
-  update('TL',   'fsr_top_left',     FSR_MAX, '');
-  update('TR',   'fsr_top_right',    FSR_MAX, '');
-  update('BL',   'fsr_bottom_left',  FSR_MAX, '');
-  update('BR',   'fsr_bottom_right', FSR_MAX, '');
-  update('Temp', 'temperature',      TEMP_MAX, '°C');
+  update('FL',   'fsr_front_left',  FSR_MAX, '');
+  update('FR',   'fsr_front_right', FSR_MAX, '');
+  update('BL',   'fsr_back_left',   FSR_MAX, '');
+  update('BR',   'fsr_back_right',  FSR_MAX, '');
+  update('Temp', 'temperature',     TEMP_MAX, '°C');
 }
 
 function updateFSRDots(s) {
   const keys = [
-    ['dotTL', 'fsr_top_left'],
-    ['dotTR', 'fsr_top_right'],
-    ['dotBL', 'fsr_bottom_left'],
-    ['dotBR', 'fsr_bottom_right'],
+    ['dotFL', 'fsr_front_left'],
+    ['dotFR', 'fsr_front_right'],
+    ['dotBL', 'fsr_back_left'],
+    ['dotBR', 'fsr_back_right'],
   ];
   keys.forEach(([id, key]) => {
     const norm = Math.min(1, (s[key] ?? 0) / FSR_MAX);

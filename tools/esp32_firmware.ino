@@ -142,10 +142,10 @@ void loop() {
     doc["timestamp"] = now / 1000.0;
 
     JsonObject sensors = doc.createNestedObject("sensors");
-    sensors["fsr_top_left"] = t_l;
-    sensors["fsr_top_right"] = t_r;
-    sensors["fsr_bottom_left"] = b_l;
-    sensors["fsr_bottom_right"] = b_r;
+    sensors["fsr_front_left"]  = t_l;
+    sensors["fsr_front_right"] = t_r;
+    sensors["fsr_back_left"]   = b_l;
+    sensors["fsr_back_right"]  = b_r;
     sensors["temperature"] = 36.5; 
 
     char buffer[256];
