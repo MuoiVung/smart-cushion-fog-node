@@ -34,6 +34,7 @@ import customtkinter as ctk
 from launcher.docker_manager import DockerManager, ServiceState, ServiceStatus
 from launcher.mqtt_monitor import MQTTMonitor, MonitorMessage
 from launcher.ws_monitor import WebSocketMonitor
+from launcher.dashboard_panel import DashboardPanel
 
 # ── Theme ─────────────────────────────────────────────────────────────────
 ctk.set_appearance_mode("dark")
@@ -54,6 +55,7 @@ COLOR = {
 
 # Channel metadata for the monitor tabs
 CHANNELS = [
+    {"key": "live_dashboard", "label": "📊  Live Dashboard", "color": COLOR["green"]},
     {"key": "esp32_to_fog",  "label": "📡  ESP32 → Fog",   "color": COLOR["blue"]},
     {"key": "fog_to_esp32",  "label": "📤  Fog → ESP32",   "color": COLOR["red"]},
     {"key": "fog_to_cloud",  "label": "☁️   Fog → Cloud",  "color": COLOR["purple"]},
@@ -409,25 +411,29 @@ class FogLauncherApp(ctk.CTk):
         ).grid(row=0, column=1, padx=4)
 
         # Text display area
-        self._monitor_texts: dict[str, ctk.CTkTextbox] = {}
+        self._monitor_panels = {}
         container = ctk.CTkFrame(frame, fg_color="transparent")
         container.grid(row=1, column=0, sticky="nsew", padx=16, pady=(8, 14))
         container.grid_rowconfigure(0, weight=1)
         container.grid_columnconfigure(0, weight=1)
 
         for ch in CHANNELS:
-            tb = ctk.CTkTextbox(
-                container,
-                font=ctk.CTkFont(family="Courier", size=11),
-                fg_color=COLOR["bg"],
-                text_color=COLOR["text"],
-                corner_radius=8,
-                state="disabled",
-                wrap="none",
-            )
-            tb.grid(row=0, column=0, sticky="nsew")
-            tb.grid_remove()
-            self._monitor_texts[ch["key"]] = tb
+            if ch["key"] == "live_dashboard":
+                panel = DashboardPanel(container)
+                self._dashboard = panel
+            else:
+                panel = ctk.CTkTextbox(
+                    container,
+                    font=ctk.CTkFont(family="Courier", size=11),
+                    fg_color=COLOR["bg"],
+                    text_color=COLOR["text"],
+                    corner_radius=8,
+                    state="disabled",
+                    wrap="none",
+                )
+            panel.grid(row=0, column=0, sticky="nsew")
+            panel.grid_remove()
+            self._monitor_panels[ch["key"]] = panel
 
         # Activate first tab
         self._select_channel(CHANNELS[0]["key"])
@@ -535,17 +541,17 @@ class FogLauncherApp(ctk.CTk):
         self._active_channel = channel_key
         for ch in CHANNELS:
             k = ch["key"]
-            tb  = self._monitor_texts[k]
+            panel  = self._monitor_panels[k]
             btn = self._tab_buttons[k]
             if k == channel_key:
-                tb.grid()
+                panel.grid()
                 btn.configure(
                     border_color=ch["color"],
                     text_color=ch["color"],
                     fg_color=COLOR["bg"],
                 )
             else:
-                tb.grid_remove()
+                panel.grid_remove()
                 btn.configure(
                     border_color=COLOR["muted"],
                     text_color=COLOR["muted"],
@@ -560,10 +566,12 @@ class FogLauncherApp(ctk.CTk):
             self._pause_btn.configure(text="⏸ Pause", border_color=COLOR["yellow"], text_color=COLOR["yellow"])
 
     def _on_clear_monitor(self) -> None:
-        for tb in self._monitor_texts.values():
-            tb.configure(state="normal")
-            tb.delete("1.0", "end")
-            tb.configure(state="disabled")
+        for k, pnl in self._monitor_panels.items():
+            if k == "live_dashboard":
+                continue
+            pnl.configure(state="normal")
+            pnl.delete("1.0", "end")
+            pnl.configure(state="disabled")
 
     # =========================================================================
     # Callbacks from background threads
@@ -665,22 +673,31 @@ class FogLauncherApp(ctk.CTk):
         self._console.configure(state="disabled")
 
     def _append_monitor(self, msg: MonitorMessage) -> None:
-        """Append a MonitorMessage to the correct channel text box."""
-        tb = self._monitor_texts.get(msg.channel)
-        if tb is None:
+        """Append a MonitorMessage to the correct channel widget."""
+        import json
+        
+        if msg.channel == "fog_to_app":
+            try:
+                payload_dict = json.loads(msg.payload)
+                self._dashboard.update_data(payload_dict)
+            except Exception:
+                pass
+
+        pnl = self._monitor_panels.get(msg.channel)
+        if pnl is None or msg.channel == "live_dashboard":
             return
 
         header = f"── {msg.timestamp}  {msg.topic} ──\n"
         body   = msg.payload + "\n\n"
 
-        tb.configure(state="normal")
-        tb.insert("end", header + body)
-        tb.see("end")
+        pnl.configure(state="normal")
+        pnl.insert("end", header + body)
+        pnl.see("end")
         # Trim
-        lines = int(tb.index("end").split(".")[0])
+        lines = int(pnl.index("end").split(".")[0])
         if lines > self.MAX_LOG:
-            tb.delete("1.0", f"{lines - self.MAX_LOG}.0")
-        tb.configure(state="disabled")
+            pnl.delete("1.0", f"{lines - self.MAX_LOG}.0")
+        pnl.configure(state="disabled")
 
     def _on_close(self) -> None:
         """Clean up on window close."""

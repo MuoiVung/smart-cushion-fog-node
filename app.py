@@ -194,6 +194,9 @@ class FogApplication:
 
             # Step 4 – AI inference
             posture, confidence = self._inference.predict(features)
+            processed_features = features.tolist()
+        else:
+            processed_features = None
 
         # Step 5 – Session tracking + alert evaluation
         should_alert = self._session_manager.add_reading(
@@ -223,6 +226,7 @@ class FogApplication:
             confidence=round(confidence, 4),
             person_detected=person_detected,
             sensors=sensors,
+            features=processed_features,
             alert_sent=alert_sent,
         )
         await self._ws_server.broadcast(broadcast.model_dump())

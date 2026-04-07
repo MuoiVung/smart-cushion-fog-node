@@ -115,6 +115,7 @@ class WebSocketBroadcast(BaseModel):
     confidence:      float        = Field(..., ge=0.0, le=1.0)
     person_detected: bool
     sensors:         SensorReading
+    features:        list[float] | None = Field(default=None, description="Processed AI features (0.0 to 1.0)")
     alert_sent:      bool         = Field(description="True if vibration was triggered this cycle")
 
 
