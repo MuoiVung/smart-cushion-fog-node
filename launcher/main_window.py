@@ -55,7 +55,6 @@ COLOR = {
 
 # Channel metadata for the monitor tabs
 CHANNELS = [
-    {"key": "live_dashboard", "label": "📊  Live Dashboard", "color": COLOR["green"]},
     {"key": "esp32_to_fog",  "label": "📡  ESP32 → Fog",   "color": COLOR["blue"]},
     {"key": "fog_to_esp32",  "label": "📤  Fog → ESP32",   "color": COLOR["red"]},
     {"key": "fog_to_cloud",  "label": "☁️   Fog → Cloud",  "color": COLOR["purple"]},
@@ -155,94 +154,126 @@ class FogLauncherApp(ctk.CTk):
     # =========================================================================
 
     def _build_ui(self) -> None:
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(3, weight=2)  # Monitor
-        self.grid_rowconfigure(4, weight=1)  # Console
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
 
-        self._build_header()
-        self._build_top_row()
-        self._build_model_panel()
-        self._build_monitor_panel()
-        self._build_console_panel()
+        # ── Sidebar ───────────────────────────────────────────────────────────
+        self._build_sidebar()
 
-    # ── Header ────────────────────────────────────────────────────────────────
+        # ── Main Content Area ─────────────────────────────────────────────────
+        self.main_content_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.main_content_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
+        self.main_content_frame.grid_rowconfigure(0, weight=1)
+        self.main_content_frame.grid_columnconfigure(0, weight=1)
 
-    def _build_header(self) -> None:
-        frame = ctk.CTkFrame(self, fg_color=COLOR["surface"], corner_radius=0, height=60)
-        frame.grid(row=0, column=0, sticky="ew", padx=0, pady=0)
-        frame.grid_columnconfigure(1, weight=1)
+        # ── Views ─────────────────────────────────────────────────────────────
+        self._build_dashboard_view()
+        self._build_config_view()
+        self._build_monitor_view()
 
-        ctk.CTkLabel(
-            frame, text="🪑", font=ctk.CTkFont(size=28)
-        ).grid(row=0, column=0, padx=(16, 8), pady=8)
+        # Select default
+        self._select_nav("dashboard")
 
-        ctk.CTkLabel(
-            frame,
-            text="Smart Cushion Fog Node",
-            font=ctk.CTkFont(family="Inter", size=17, weight="bold"),
-            text_color=COLOR["text"],
-        ).grid(row=0, column=1, sticky="w")
+    def _build_sidebar(self) -> None:
+        sidebar = ctk.CTkFrame(self, width=220, corner_radius=0, fg_color=COLOR["surface"])
+        sidebar.grid(row=0, column=0, sticky="nsew")
+        sidebar.grid_rowconfigure(6, weight=1) # Spacer
 
+        # Logo/Title
+        title = ctk.CTkLabel(sidebar, text="🪑 Smart Cushion", font=ctk.CTkFont(size=20, weight="bold"))
+        title.grid(row=0, column=0, padx=20, pady=(20, 10))
+
+        # Header Status
         self._header_status = ctk.CTkLabel(
-            frame,
-            text="● Services stopped",
-            font=ctk.CTkFont(size=12),
-            text_color=COLOR["muted"],
+            sidebar, text="● Services stopped",
+            font=ctk.CTkFont(size=12), text_color=COLOR["muted"]
         )
-        self._header_status.grid(row=0, column=2, padx=16)
+        self._header_status.grid(row=1, column=0, padx=20, pady=(0, 20))
 
-    # ── Top row: Service Control + System Status ──────────────────────────────
+        # Nav Buttons
+        self._nav_buttons = {}
+        
+        def make_nav(name, text, row):
+            btn = ctk.CTkButton(
+                sidebar, text=text, fg_color="transparent",
+                text_color=COLOR["text"], anchor="w",
+                font=ctk.CTkFont(size=14, weight="bold"),
+                command=lambda n=name: self._select_nav(n)
+            )
+            btn.grid(row=row, column=0, padx=20, pady=5, sticky="ew")
+            self._nav_buttons[name] = btn
 
-    def _build_top_row(self) -> None:
-        row = ctk.CTkFrame(self, fg_color="transparent")
-        row.grid(row=1, column=0, sticky="ew", padx=16, pady=(12, 0))
-        row.grid_columnconfigure(0, weight=1)
-        row.grid_columnconfigure(1, weight=1)
-
-        self._build_service_control(row)
-        self._build_status_panel(row)
-
-    def _build_service_control(self, parent) -> None:
-        frame = ctk.CTkFrame(parent, fg_color=COLOR["surface"], corner_radius=12)
-        frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8), pady=0)
-        frame.grid_columnconfigure(0, weight=1)
-
-        ctk.CTkLabel(
-            frame, text="SERVICE CONTROL",
-            font=ctk.CTkFont(size=10, weight="bold"),
-            text_color=COLOR["muted"],
-        ).grid(row=0, column=0, padx=16, pady=(14, 6), sticky="w")
-
+        make_nav("dashboard", "📊 Live Dashboard", 2)
+        make_nav("config", "⚙️ Config & Control", 3)
+        make_nav("monitor", "📋 Logs & Raw Data", 4)
+        
+        # Start/Stop buttons in sidebar bottom
         self._start_btn = ctk.CTkButton(
-            frame,
-            text="▶  Start Services",
-            font=ctk.CTkFont(size=13, weight="bold"),
-            fg_color=COLOR["green"],
-            hover_color="#2ea043",
-            text_color="#ffffff",
-            corner_radius=8,
-            height=40,
-            command=self._on_start,
+            sidebar, text="▶  Start Services", font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color=COLOR["green"], hover_color="#2ea043", text_color="#ffffff",
+            command=self._on_start
         )
-        self._start_btn.grid(row=1, column=0, padx=16, pady=6, sticky="ew")
+        self._start_btn.grid(row=7, column=0, padx=20, pady=10, sticky="ew")
 
         self._stop_btn = ctk.CTkButton(
-            frame,
-            text="■  Stop Services",
-            font=ctk.CTkFont(size=13, weight="bold"),
-            fg_color="#cf222e",
-            hover_color="#a40e26",
-            text_color="#ffffff",
-            corner_radius=8,
-            height=40,
-            command=self._on_stop,
-            state="disabled",
+            sidebar, text="■  Stop Services", font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color="#cf222e", hover_color="#a40e26", text_color="#ffffff",
+            state="disabled", command=self._on_stop
         )
-        self._stop_btn.grid(row=2, column=0, padx=16, pady=(0, 14), sticky="ew")
+        self._stop_btn.grid(row=8, column=0, padx=20, pady=(0, 20), sticky="ew")
+
+    def _build_dashboard_view(self) -> None:
+        self._view_dashboard = ctk.CTkFrame(self.main_content_frame, fg_color="transparent")
+        self._view_dashboard.grid(row=0, column=0, sticky="nsew")
+        self._view_dashboard.grid_rowconfigure(0, weight=1)
+        self._view_dashboard.grid_columnconfigure(0, weight=1)
+        
+        self._dashboard_panel = DashboardPanel(self._view_dashboard)
+        self._dashboard_panel.grid(row=0, column=0, sticky="nsew")
+        self._dashboard = self._dashboard_panel
+
+    def _build_config_view(self) -> None:
+        self._view_config = ctk.CTkFrame(self.main_content_frame, fg_color="transparent")
+        self._view_config.grid(row=0, column=0, sticky="nsew")
+        self._view_config.grid_columnconfigure(0, weight=1)
+        
+        # System status panel
+        row1 = ctk.CTkFrame(self._view_config, fg_color="transparent")
+        row1.grid(row=0, column=0, sticky="ew", padx=16, pady=(12, 0))
+        row1.grid_columnconfigure(0, weight=1)
+        self._build_status_panel(row1)
+        
+        self._build_model_panel(self._view_config)
+
+    def _build_monitor_view(self) -> None:
+        self._view_monitor = ctk.CTkFrame(self.main_content_frame, fg_color="transparent")
+        self._view_monitor.grid(row=0, column=0, sticky="nsew")
+        self._view_monitor.grid_rowconfigure(0, weight=2)
+        self._view_monitor.grid_rowconfigure(1, weight=1)
+        self._view_monitor.grid_columnconfigure(0, weight=1)
+        
+        self._build_monitor_panel(self._view_monitor)
+        self._build_console_panel(self._view_monitor)
+
+    def _select_nav(self, name: str) -> None:
+        views = {
+            "dashboard": self._view_dashboard,
+            "config": self._view_config,
+            "monitor": self._view_monitor
+        }
+        for k, v in views.items():
+            if k == name:
+                v.grid()
+                self._nav_buttons[k].configure(fg_color="#1a2537", border_color=COLOR["blue"], border_width=1)
+            else:
+                v.grid_remove()
+                self._nav_buttons[k].configure(fg_color="transparent", border_width=0)
+
+
 
     def _build_status_panel(self, parent) -> None:
         frame = ctk.CTkFrame(parent, fg_color=COLOR["surface"], corner_radius=12)
-        frame.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+        frame.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
         frame.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(
@@ -283,9 +314,9 @@ class FogLauncherApp(ctk.CTk):
 
     # ── AI Model Configuration ────────────────────────────────────────────────
 
-    def _build_model_panel(self) -> None:
-        frame = ctk.CTkFrame(self, fg_color=COLOR["surface"], corner_radius=12)
-        frame.grid(row=2, column=0, sticky="ew", padx=16, pady=(12, 0))
+    def _build_model_panel(self, parent) -> None:
+        frame = ctk.CTkFrame(parent, fg_color=COLOR["surface"], corner_radius=12)
+        frame.grid(row=1, column=0, sticky="ew", padx=16, pady=(12, 0))
         frame.grid_columnconfigure(2, weight=1)
 
         ctk.CTkLabel(
@@ -349,9 +380,9 @@ class FogLauncherApp(ctk.CTk):
 
     # ── Data Monitor ──────────────────────────────────────────────────────────
 
-    def _build_monitor_panel(self) -> None:
-        frame = ctk.CTkFrame(self, fg_color=COLOR["surface"], corner_radius=12)
-        frame.grid(row=3, column=0, sticky="nsew", padx=16, pady=(12, 0))
+    def _build_monitor_panel(self, parent) -> None:
+        frame = ctk.CTkFrame(parent, fg_color=COLOR["surface"], corner_radius=12)
+        frame.grid(row=0, column=0, sticky="nsew", padx=16, pady=(12, 0))
         frame.grid_rowconfigure(1, weight=1)
         frame.grid_columnconfigure(0, weight=1)
 
@@ -418,19 +449,15 @@ class FogLauncherApp(ctk.CTk):
         container.grid_columnconfigure(0, weight=1)
 
         for ch in CHANNELS:
-            if ch["key"] == "live_dashboard":
-                panel = DashboardPanel(container)
-                self._dashboard = panel
-            else:
-                panel = ctk.CTkTextbox(
-                    container,
-                    font=ctk.CTkFont(family="Courier", size=11),
-                    fg_color=COLOR["bg"],
-                    text_color=COLOR["text"],
-                    corner_radius=8,
-                    state="disabled",
-                    wrap="none",
-                )
+            panel = ctk.CTkTextbox(
+                container,
+                font=ctk.CTkFont(family="Courier", size=11),
+                fg_color=COLOR["bg"],
+                text_color=COLOR["text"],
+                corner_radius=8,
+                state="disabled",
+                wrap="none",
+            )
             panel.grid(row=0, column=0, sticky="nsew")
             panel.grid_remove()
             self._monitor_panels[ch["key"]] = panel
@@ -440,9 +467,9 @@ class FogLauncherApp(ctk.CTk):
 
     # ── Console ───────────────────────────────────────────────────────────────
 
-    def _build_console_panel(self) -> None:
-        frame = ctk.CTkFrame(self, fg_color=COLOR["surface"], corner_radius=12)
-        frame.grid(row=4, column=0, sticky="nsew", padx=16, pady=(12, 16))
+    def _build_console_panel(self, parent) -> None:
+        frame = ctk.CTkFrame(parent, fg_color=COLOR["surface"], corner_radius=12)
+        frame.grid(row=1, column=0, sticky="nsew", padx=16, pady=(12, 16))
         frame.grid_rowconfigure(1, weight=1)
         frame.grid_columnconfigure(0, weight=1)
 
@@ -566,9 +593,7 @@ class FogLauncherApp(ctk.CTk):
             self._pause_btn.configure(text="⏸ Pause", border_color=COLOR["yellow"], text_color=COLOR["yellow"])
 
     def _on_clear_monitor(self) -> None:
-        for k, pnl in self._monitor_panels.items():
-            if k == "live_dashboard":
-                continue
+        for pnl in self._monitor_panels.values():
             pnl.configure(state="normal")
             pnl.delete("1.0", "end")
             pnl.configure(state="disabled")
@@ -684,7 +709,7 @@ class FogLauncherApp(ctk.CTk):
                 pass
 
         pnl = self._monitor_panels.get(msg.channel)
-        if pnl is None or msg.channel == "live_dashboard":
+        if pnl is None:
             return
 
         header = f"── {msg.timestamp}  {msg.topic} ──\n"
