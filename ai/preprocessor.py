@@ -2,17 +2,19 @@
 Sensor data preprocessor for the Smart Cushion Fog Node.
 
 Responsibilities:
-  1. Detect human presence from the infrared temperature reading.
+  1. Detect human presence using total FSR pressure (sum of all 4 sensors).
   2. Normalize raw FSR ADC values into a [0, 1] float vector suitable
      for the PyTorch inference model.
 
 Design notes:
+  - Person detection uses total FSR sum, NOT temperature.
+    Reason: the temperature sensor measures ambient room temperature (~20-25°C)
+    and does NOT detect body heat, so it cannot reliably determine if someone
+    is seated.
   - FSR normalization is simple min-max scaling against the ADC full-scale
-    (0–4095 for ESP32 12-bit ADC). Future versions can add per-sensor
-    calibration offsets stored in a calibration.json file.
-  - Temperature thresholding is intentionally simple; a more sophisticated
-    approach could use a short rolling average to avoid false negatives
-    caused by brief sensor glitches.
+    (0-4095 for ESP32 12-bit ADC).
+  - The fsr_presence_threshold (default: 1000) should be tuned based on the
+    observed empty-cushion FSR readings for your specific hardware.
 """
 
 import logging
@@ -21,7 +23,7 @@ from data.schema import SensorReading
 
 logger = logging.getLogger(__name__)
 
-# Full-scale ADC value for ESP32 (12-bit → 4095)
+# Full-scale ADC value for ESP32 (12-bit -> 4095)
 _FSR_MAX = 4095.0
 
 
@@ -31,44 +33,68 @@ class Preprocessor:
     ready for the AI inference engine.
 
     Hardware context:
-      - FSR402 sensors output raw ADC values (0–4095, 12-bit ESP32).
-      - Baseline (unloaded) observed at ~2400–3100 due to sensor + circuit offset.
-      - Temperature (pre-converted to °C on ESP32): ~20–25°C empty, ~32–37°C seated.
+      - FSR402 sensors output raw ADC values (0-4095, 12-bit ESP32).
+      - Observed values with person seated: ~2400-3100 per sensor.
+      - Temperature sensor measures AMBIENT temperature (room, ~20-25 degrees C),
+        not body temperature -- cannot be used for person detection.
     """
 
-    def __init__(self, temperature_threshold: float = 30.0) -> None:
+    def __init__(
+        self,
+        fsr_presence_threshold: int = 1000,
+        temperature_threshold: float = 30.0,   # kept for backward compat, unused
+    ) -> None:
         """
         Args:
-            temperature_threshold: If the measured temperature is below this
-                value (°C), the seat is considered empty and posture
-                classification is skipped.
+            fsr_presence_threshold: Minimum total FSR ADC sum (all 4 sensors)
+                to consider a person as seated. Default 1000 is conservative
+                -- tune higher if the empty-cushion baseline sum is above this.
+            temperature_threshold: Deprecated. Kept for compatibility but no
+                longer used for person detection (temperature sensor measures
+                ambient air, not body heat).
         """
-        self._temp_threshold = temperature_threshold
+        self._fsr_threshold = fsr_presence_threshold
+        self._temp_threshold = temperature_threshold   # retained, unused
         logger.info(
-            f"Preprocessor initialised: temperature_threshold={temperature_threshold}°C, "
+            f"Preprocessor initialised: fsr_presence_threshold={fsr_presence_threshold}, "
             f"fsr_max={int(_FSR_MAX)}"
         )
 
-    # ── Public API ─────────────────────────────────────────────────────────
+    # -- Public API -----------------------------------------------------------
 
     def is_person_present(self, sensors: SensorReading) -> bool:
         """
         Determine whether a human is sitting on the cushion.
 
-        Uses the IR sensor temperature reading: human body temperature
-        is typically 36–37 °C, while an empty cushion is close to
-        room temperature (20–25 °C).
+        Uses the SUM of all 4 FSR sensor readings as the pressure indicator.
+        A person is considered present when:
+            fsr_front_left + fsr_front_right + fsr_back_left + fsr_back_right
+            >= fsr_presence_threshold
+
+        NOTE: Temperature is NOT used here because the onboard temperature
+        sensor measures ambient room temperature (~20 degrees C), not body surface
+        temperature. Total FSR pressure is a more reliable presence signal.
 
         Returns:
-            True  → a person is present, proceed with posture classification.
-            False → seat is empty, skip inference and send no alerts.
+            True  -> a person is present, proceed with posture classification.
+            False -> seat is empty, skip inference and send no alerts.
         """
-        present = sensors.temperature >= self._temp_threshold
+        total_pressure = (
+            sensors.fsr_front_left
+            + sensors.fsr_front_right
+            + sensors.fsr_back_left
+            + sensors.fsr_back_right
+        )
+        present = total_pressure >= self._fsr_threshold
         if not present:
             logger.debug(
-                f"No person detected: temperature={sensors.temperature:.1f}°C "
-                f"(threshold={self._temp_threshold}°C) "
-                f"– empty cushion ≈ room temp, seated ≈ 32–37°C"
+                f"No person detected: total FSR={total_pressure} "
+                f"(threshold={self._fsr_threshold})"
+            )
+        else:
+            logger.debug(
+                f"Person detected: total FSR={total_pressure} "
+                f"(threshold={self._fsr_threshold})"
             )
         return present
 
@@ -101,5 +127,5 @@ class Preprocessor:
         # Clip to [0, 1] as a safety guard against out-of-range readings
         normalised = np.clip(normalised, 0.0, 1.0)
 
-        logger.debug(f"Features (normalised): {normalised}")
+        logger.debug(f"Features (normalised): {normalised}  total_raw={int(raw.sum())}")
         return normalised
