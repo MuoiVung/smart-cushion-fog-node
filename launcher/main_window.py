@@ -508,9 +508,7 @@ class FogLauncherApp(ctk.CTk):
 
     def _on_stop(self) -> None:
         self._stop_btn.configure(state="disabled", text="Stopping…")
-        self._mqtt_monitor.stop()
-        self._ws_monitor.stop()
-        self._monitors_started = False
+        self._stop_monitors()
         self._docker.stop()
         self.after(4000, lambda: self._start_btn.configure(state="normal", text="▶  Start Services"))
         self.after(4000, lambda: self._stop_btn.configure(text="■  Stop Services"))
@@ -525,6 +523,14 @@ class FogLauncherApp(ctk.CTk):
         self._mqtt_monitor.start()
         self._ws_monitor.start()
         self._log_console("✅ Monitors attached to running services")
+
+    def _stop_monitors(self) -> None:
+        if not self._monitors_started:
+            return
+        self._monitors_started = False
+        self._mqtt_monitor.stop()
+        self._ws_monitor.stop()
+        self._log_console("⚠️ Monitors detached (services disconnected)")
 
     def _on_model_mode_change(self) -> None:
         mode = self._model_mode.get()
@@ -609,10 +615,12 @@ class FogLauncherApp(ctk.CTk):
         if (
             status.mosquitto == ServiceState.RUNNING
             and status.fog_node == ServiceState.RUNNING
-            and not self._monitors_started
         ):
-            # Schedule on main thread (this callback runs in a background thread)
-            self.after(0, self._start_monitors)
+            if not self._monitors_started:
+                self.after(0, self._start_monitors)
+        else:
+            if self._monitors_started:
+                self.after(0, self._stop_monitors)
 
     # =========================================================================
     # Periodic UI update (runs on main thread)
