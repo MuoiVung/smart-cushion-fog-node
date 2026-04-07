@@ -13,52 +13,52 @@ from data.schema import (
 class TestSensorReading:
     def test_valid_reading(self):
         s = SensorReading(
-            fsr_top_left=512, fsr_top_right=498,
-            fsr_bottom_left=601, fsr_bottom_right=587,
+            fsr_front_left=512, fsr_front_right=498,
+            fsr_back_left=601, fsr_back_right=587,
             temperature=36.4,
         )
-        assert s.fsr_top_left == 512
+        assert s.fsr_front_left == 512
         assert s.temperature == 36.4
 
     def test_fsr_out_of_range_raises(self):
         with pytest.raises(ValidationError):
             SensorReading(
-                fsr_top_left=9999,  # > 4095
-                fsr_top_right=0, fsr_bottom_left=0, fsr_bottom_right=0,
+                fsr_front_left=9999,  # > 4095
+                fsr_front_right=0, fsr_back_left=0, fsr_back_right=0,
                 temperature=36.0,
             )
 
     def test_negative_fsr_raises(self):
         with pytest.raises(ValidationError):
             SensorReading(
-                fsr_top_left=-1,
-                fsr_top_right=0, fsr_bottom_left=0, fsr_bottom_right=0,
+                fsr_front_left=-1,
+                fsr_front_right=0, fsr_back_left=0, fsr_back_right=0,
                 temperature=36.0,
             )
 
     def test_temperature_out_of_range_raises(self):
         with pytest.raises(ValidationError):
             SensorReading(
-                fsr_top_left=0, fsr_top_right=0,
-                fsr_bottom_left=0, fsr_bottom_right=0,
+                fsr_front_left=0, fsr_front_right=0,
+                fsr_back_left=0, fsr_back_right=0,
                 temperature=200.0,  # > 125
             )
 
     def test_boundary_values_accepted(self):
         s = SensorReading(
-            fsr_top_left=0, fsr_top_right=4095,
-            fsr_bottom_left=2048, fsr_bottom_right=1,
+            fsr_front_left=0, fsr_front_right=4095,
+            fsr_back_left=2048, fsr_back_right=1,
             temperature=-40.0,
         )
-        assert s.fsr_top_right == 4095
+        assert s.fsr_front_right == 4095
 
 
 # ── RawMessage ─────────────────────────────────────────────────────────────
 
 class TestRawMessage:
     VALID_SENSORS = dict(
-        fsr_top_left=500, fsr_top_right=500,
-        fsr_bottom_left=500, fsr_bottom_right=500,
+        fsr_front_left=500, fsr_front_right=500,
+        fsr_back_left=500, fsr_back_right=500,
         temperature=36.5,
     )
 
@@ -69,7 +69,7 @@ class TestRawMessage:
             sensors=self.VALID_SENSORS,
         )
         assert msg.device_id == "esp32-01"
-        assert msg.sensors.fsr_top_left == 500
+        assert msg.sensors.fsr_front_left == 500
 
     def test_missing_field_raises(self):
         with pytest.raises(ValidationError):

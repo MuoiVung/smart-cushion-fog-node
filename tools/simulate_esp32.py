@@ -85,11 +85,11 @@ def generate_reading(scenario_name: str, device_id: str) -> dict:
         "device_id": device_id,
         "timestamp": time.time(),
         "sensors": {
-            "fsr_top_left":     rval("tl"),
-            "fsr_top_right":    rval("tr"),
-            "fsr_bottom_left":  rval("bl"),
-            "fsr_bottom_right": rval("br"),
-            "temperature":      rval("temp"),
+            "fsr_front_left":  rval("tl"),
+            "fsr_front_right": rval("tr"),
+            "fsr_back_left":   rval("bl"),
+            "fsr_back_right":  rval("br"),
+            "temperature":     rval("temp"),
         },
     }
 
@@ -143,8 +143,8 @@ def run_simulator(scenario: str, interval: float, count: int) -> None:
             sensors = payload["sensors"]
             print(
                 f"[SIM] #{published:04d}  scenario={active_scenario:<16}  "
-                f"TL={sensors['fsr_top_left']:4d}  TR={sensors['fsr_top_right']:4d}  "
-                f"BL={sensors['fsr_bottom_left']:4d}  BR={sensors['fsr_bottom_right']:4d}  "
+                f"FL={sensors['fsr_front_left']:4d}  FR={sensors['fsr_front_right']:4d}  "
+                f"BL={sensors['fsr_back_left']:4d}  BR={sensors['fsr_back_right']:4d}  "
                 f"Temp={sensors['temperature']:5.1f}°C"
             )
 

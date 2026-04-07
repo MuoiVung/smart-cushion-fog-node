@@ -71,7 +71,7 @@ class Preprocessor:
         Convert raw FSR ADC values into a normalised feature vector.
 
         The returned array has shape (4,) with values in [0.0, 1.0]:
-            [fsr_top_left, fsr_top_right, fsr_bottom_left, fsr_bottom_right]
+            [fsr_front_left, fsr_front_right, fsr_back_left, fsr_back_right]
 
         Args:
             sensors: Validated SensorReading from the ESP32.
@@ -81,10 +81,10 @@ class Preprocessor:
         """
         raw = np.array(
             [
-                sensors.fsr_top_left,
-                sensors.fsr_top_right,
-                sensors.fsr_bottom_left,
-                sensors.fsr_bottom_right,
+                sensors.fsr_front_left,
+                sensors.fsr_front_right,
+                sensors.fsr_back_left,
+                sensors.fsr_back_right,
             ],
             dtype=np.float32,
         )

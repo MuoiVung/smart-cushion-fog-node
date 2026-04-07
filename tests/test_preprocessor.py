@@ -6,10 +6,10 @@ from data.schema import SensorReading
 from ai.preprocessor import Preprocessor, _FSR_MAX
 
 
-def make_reading(tl=2000, tr=2000, bl=2000, br=2000, temp=36.5) -> SensorReading:
+def make_reading(fl=2000, fr=2000, bl=2000, br=2000, temp=36.5) -> SensorReading:
     return SensorReading(
-        fsr_top_left=tl, fsr_top_right=tr,
-        fsr_bottom_left=bl, fsr_bottom_right=br,
+        fsr_front_left=fl, fsr_front_right=fr,
+        fsr_back_left=bl, fsr_back_right=br,
         temperature=temp,
     )
 
@@ -49,24 +49,24 @@ class TestFeatureExtraction:
         assert features.dtype == np.float32
 
     def test_values_in_unit_range(self):
-        reading = make_reading(tl=0, tr=4095, bl=2048, br=1024)
+        reading = make_reading(fl=0, fr=4095, bl=2048, br=1024)
         features = self.proc.extract_features(reading)
         assert features.min() >= 0.0
         assert features.max() <= 1.0
 
     def test_zero_input_gives_zero(self):
-        reading = make_reading(tl=0, tr=0, bl=0, br=0)
+        reading = make_reading(fl=0, fr=0, bl=0, br=0)
         features = self.proc.extract_features(reading)
         np.testing.assert_array_equal(features, np.zeros(4, dtype=np.float32))
 
     def test_full_scale_normalises_to_one(self):
-        reading = make_reading(tl=4095, tr=4095, bl=4095, br=4095)
+        reading = make_reading(fl=4095, fr=4095, bl=4095, br=4095)
         features = self.proc.extract_features(reading)
         np.testing.assert_allclose(features, np.ones(4, dtype=np.float32), atol=1e-5)
 
-    def test_order_tl_tr_bl_br(self):
-        """Verify the feature vector order matches [TL, TR, BL, BR]."""
-        reading = make_reading(tl=4095, tr=0, bl=0, br=0)
+    def test_order_fl_fr_bl_br(self):
+        """Verify the feature vector order matches [FL, FR, BL, BR]."""
+        reading = make_reading(fl=4095, fr=0, bl=0, br=0)
         features = self.proc.extract_features(reading)
         assert features[0] == pytest.approx(1.0, abs=1e-4)
         assert features[1] == pytest.approx(0.0, abs=1e-4)
