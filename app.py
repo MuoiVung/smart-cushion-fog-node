@@ -188,6 +188,7 @@ class FogApplication:
         if not person_detected:
             posture    = PostureLabel.UNKNOWN
             confidence = 1.0
+            processed_features = None
         else:
             # Step 3 – Feature extraction
             features = self._preprocessor.extract_features(sensors)
@@ -195,8 +196,6 @@ class FogApplication:
             # Step 4 – AI inference
             posture, confidence = self._inference.predict(features)
             processed_features = features.tolist()
-        else:
-            processed_features = None
 
         # Step 5 – Session tracking + alert evaluation
         should_alert = self._session_manager.add_reading(
