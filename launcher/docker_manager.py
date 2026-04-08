@@ -12,6 +12,7 @@ Services managed:
 import json
 import logging
 import subprocess
+import sys
 import threading
 import time
 from enum import Enum
@@ -68,6 +69,9 @@ class DockerManager:
         self._running   = False
         self._poll_thread: Optional[threading.Thread] = None
 
+        self._native_mode = not self.is_docker_available()
+        self._native_process: Optional[subprocess.Popen] = None
+
     # ── Public API ─────────────────────────────────────────────────────────
 
     def start(self) -> None:
@@ -103,23 +107,55 @@ class DockerManager:
     # ── Private: subprocess operations ────────────────────────────────────
 
     def _do_start(self) -> None:
-        """Run `docker compose up -d --build` and start polling."""
+        """Run `docker compose up` or native `python app.py` and start polling."""
         try:
-            self._run_compose(
-                ["up", "-d", "--build"],
-                stream_log=True,
-            )
-            self._log("✅ Docker services started successfully")
-            self._start_polling()
+            if self._native_mode:
+                self._log("Native mode: Starting python app.py...")
+                self._native_process = subprocess.Popen(
+                    [sys.executable, "app.py"],
+                    cwd=str(self._root),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                )
+                
+                # Stream the output in a secondary thread
+                def log_native_output():
+                    if self._native_process and self._native_process.stdout:
+                        for line in self._native_process.stdout:
+                            stripped = line.rstrip()
+                            if stripped:
+                                self._log(stripped)
+                threading.Thread(target=log_native_output, daemon=True).start()
+
+                self._log("✅ Native Python services started successfully")
+                self._start_polling()
+            else:
+                self._run_compose(
+                    ["up", "-d", "--build"],
+                    stream_log=True,
+                )
+                self._log("✅ Docker services started successfully")
+                self._start_polling()
         except Exception as exc:
             self._log(f"❌ Failed to start services: {exc}")
 
     def _do_stop(self) -> None:
-        """Run `docker compose down`."""
+        """Run `docker compose down` or terminate native process."""
         try:
-            self._run_compose(["down"], stream_log=True)
-            self._log("🛑 Docker services stopped")
-            # Push a stopped status
+            if self._native_mode:
+                if self._native_process:
+                    self._native_process.terminate()
+                    try:
+                        self._native_process.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        self._native_process.kill()
+                    self._native_process = None
+                self._log("🛑 Native Python services stopped")
+            else:
+                self._run_compose(["down"], stream_log=True)
+                self._log("🛑 Docker services stopped")
+
             if self._on_status:
                 status = ServiceStatus()
                 status.mosquitto = ServiceState.STOPPED
@@ -129,10 +165,14 @@ class DockerManager:
             self._log(f"❌ Failed to stop services: {exc}")
 
     def _do_restart_fog(self) -> None:
-        """Run `docker compose restart fog-node`."""
+        """Run `docker compose restart fog-node` or restart native app."""
         try:
-            self._run_compose(["restart", "fog-node"], stream_log=True)
-            self._log("🔄 fog-node restarted")
+            if self._native_mode:
+                self._do_stop()
+                self._do_start()
+            else:
+                self._run_compose(["restart", "fog-node"], stream_log=True)
+                self._log("🔄 fog-node restarted")
         except Exception as exc:
             self._log(f"❌ Failed to restart fog-node: {exc}")
 
@@ -172,8 +212,21 @@ class DockerManager:
             time.sleep(self.POLL_INTERVAL)
 
     def _query_status(self) -> ServiceStatus:
-        """Run `docker compose ps --format json` and parse the output."""
+        """Run `docker compose ps --format json` (or check native process) and parse the output."""
         status = ServiceStatus()
+        
+        if self._native_mode:
+            # Mosquitto is assumed Running externally if user sets it up natively.
+            status.mosquitto = ServiceState.RUNNING
+            if self._native_process:
+                if self._native_process.poll() is None:
+                    status.fog_node = ServiceState.RUNNING
+                else:
+                    status.fog_node = ServiceState.ERROR
+            else:
+                status.fog_node = ServiceState.STOPPED
+            return status
+
         try:
             result = subprocess.run(
                 ["docker", "compose", "ps", "--format", "json"],
