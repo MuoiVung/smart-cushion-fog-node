@@ -76,10 +76,16 @@ class DataCollectorPanel(ctk.CTkFrame):
         self.duration_entry.grid(row=1, column=1, padx=16, pady=6, sticky="w")
 
         # Label Config
-        ctk.CTkLabel(frame, text="Label:", font=ctk.CTkFont(size=13)).grid(row=2, column=0, padx=16, pady=(6, 14), sticky="w")
+        ctk.CTkLabel(frame, text="Label:", font=ctk.CTkFont(size=13)).grid(row=2, column=0, padx=16, pady=6, sticky="w")
         self.label_var = ctk.StringVar(value=self.saved_labels[0] if self.saved_labels else "")
         self.label_combo = ctk.CTkComboBox(frame, values=self.saved_labels, variable=self.label_var, width=250)
-        self.label_combo.grid(row=2, column=1, padx=16, pady=(6, 14), sticky="w")
+        self.label_combo.grid(row=2, column=1, padx=16, pady=6, sticky="w")
+
+        # Person Present Manual Override
+        ctk.CTkLabel(frame, text="Person Present:", font=ctk.CTkFont(size=13)).grid(row=3, column=0, padx=16, pady=(6, 14), sticky="w")
+        self.person_present_var = ctk.BooleanVar(value=True)
+        self.person_present_cb = ctk.CTkCheckBox(frame, text="Current session has a person seated", variable=self.person_present_var)
+        self.person_present_cb.grid(row=3, column=1, padx=16, pady=(6, 14), sticky="w")
 
     def _build_columns_panel(self):
         frame = ctk.CTkFrame(self, corner_radius=12)
@@ -96,7 +102,7 @@ class DataCollectorPanel(ctk.CTkFrame):
             ("FSR Back Left", "fsr_back_left", True),
             ("FSR Back Right", "fsr_back_right", True),
             ("Temperature", "temperature", True),
-            ("Detect Human", "detecthuman", False),
+            ("Person Present", "person_present", True),
         ]
 
         row_idx = 1
@@ -174,6 +180,7 @@ class DataCollectorPanel(ctk.CTkFrame):
         # Disable UI
         self.duration_entry.configure(state="disabled")
         self.label_combo.configure(state="disabled")
+        self.person_present_cb.configure(state="disabled")
         for cb in self.cb_vars.values(): # checkboxes are handled via var mostly, but visual disabled might be skipped for simplicity
             pass
 
@@ -213,6 +220,7 @@ class DataCollectorPanel(ctk.CTkFrame):
             
         self.duration_entry.configure(state="normal")
         self.label_combo.configure(state="normal")
+        self.person_present_cb.configure(state="normal")
         
         self.btn_action.configure(text="▶ START COLLECTION", fg_color="#3fb950", hover_color="#2ea043")
         self.progress_bar.set(1.0)
@@ -244,7 +252,7 @@ class DataCollectorPanel(ctk.CTkFrame):
                 "fsr_back_left": "FSR Back Left",
                 "fsr_back_right": "FSR Back Right",
                 "temperature": "Temperature",
-                "detecthuman": "Detect Human",
+                "person_present": "Person Present",
                 "label": "Label" # Always explicitly required
             }
             
@@ -263,10 +271,14 @@ class DataCollectorPanel(ctk.CTkFrame):
             rename_dict = {c: col_map[c] for c in available_cols if c in col_map}
             df.rename(columns=rename_dict, inplace=True)
 
+            # Format Boolean as 1/0 for AI training
+            if "Person Present" in df.columns:
+                df["Person Present"] = df["Person Present"].map({True: 1, False: 0})
+
             timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"cushion_data_{self.current_label.replace(' ', '_')}_{timestamp_str}.xlsx"
             filepath = EXPORT_DIR / filename
-            
+
             df.to_excel(filepath, index=False)
             return filepath
         except Exception as e:
@@ -288,7 +300,8 @@ class DataCollectorPanel(ctk.CTkFrame):
             row["fsr_back_right"] = sensors.get("fsr_back_right", 0)
             row["temperature"] = sensors.get("temperature", 0.0)
             
-            row["detecthuman"] = payload_dict.get("person_detected", False)
+            # Use manual toggle for data collection session (Human annotation)
+            row["person_present"] = self.person_present_var.get()
             row["label"] = self.current_label
             
             self.collected_data.append(row)
