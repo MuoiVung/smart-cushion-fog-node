@@ -35,6 +35,7 @@ from launcher.docker_manager import DockerManager, ServiceState, ServiceStatus
 from launcher.mqtt_monitor import MQTTMonitor, MonitorMessage
 from launcher.ws_monitor import WebSocketMonitor
 from launcher.dashboard_panel import DashboardPanel
+from launcher.data_collector_panel import DataCollectorPanel
 
 # ── Theme ─────────────────────────────────────────────────────────────────
 ctk.set_appearance_mode("dark")
@@ -170,6 +171,7 @@ class FogLauncherApp(ctk.CTk):
         self._build_dashboard_view()
         self._build_config_view()
         self._build_monitor_view()
+        self._build_data_collector_view()
 
         # Select default
         self._select_nav("dashboard")
@@ -204,8 +206,9 @@ class FogLauncherApp(ctk.CTk):
             self._nav_buttons[name] = btn
 
         make_nav("dashboard", "📊 Live Dashboard", 2)
-        make_nav("config", "⚙️ Config & Control", 3)
-        make_nav("monitor", "📋 Logs & Raw Data", 4)
+        make_nav("collector", "🎯 Data Collection", 3)
+        make_nav("config", "⚙️ Config & Control", 4)
+        make_nav("monitor", "📋 Logs & Raw Data", 5)
         
         # Start/Stop buttons in sidebar bottom
         self._start_btn = ctk.CTkButton(
@@ -255,9 +258,19 @@ class FogLauncherApp(ctk.CTk):
         self._build_monitor_panel(self._view_monitor)
         self._build_console_panel(self._view_monitor)
 
+    def _build_data_collector_view(self) -> None:
+        self._view_collector = ctk.CTkFrame(self.main_content_frame, fg_color="transparent")
+        self._view_collector.grid(row=0, column=0, sticky="nsew")
+        self._view_collector.grid_rowconfigure(0, weight=1)
+        self._view_collector.grid_columnconfigure(0, weight=1)
+        
+        self._data_collector = DataCollectorPanel(self._view_collector)
+        self._data_collector.grid(row=0, column=0, sticky="nsew")
+
     def _select_nav(self, name: str) -> None:
         views = {
             "dashboard": self._view_dashboard,
+            "collector": self._view_collector,
             "config": self._view_config,
             "monitor": self._view_monitor
         }
@@ -495,12 +508,6 @@ class FogLauncherApp(ctk.CTk):
     # =========================================================================
 
     def _on_start(self) -> None:
-        if not self._docker.is_docker_available():
-            messagebox.showerror(
-                "Docker Not Found",
-                "Docker does not appear to be running.\n\nPlease start Docker Desktop and try again.",
-            )
-            return
         self._start_btn.configure(state="disabled", text="Starting…")
         self._stop_btn.configure(state="normal")
         self._monitors_started = False   # Reset so monitors re-attach on next Start
@@ -713,6 +720,7 @@ class FogLauncherApp(ctk.CTk):
             try:
                 payload_dict = json.loads(msg.payload)
                 self._dashboard.update_data(payload_dict)
+                self._data_collector.process_data(payload_dict)
             except Exception:
                 pass
 
