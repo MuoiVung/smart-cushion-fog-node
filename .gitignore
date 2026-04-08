@@ -56,5 +56,9 @@ htmlcov/
 .idea/
 *.swp
 *.swo
+# ── OS-specific ───────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# ── Data Exports ──────────────────────────────────────────
+data_exports/
