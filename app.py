@@ -83,7 +83,10 @@ class FogApplication:
 
         # ── Graceful shutdown hooks ─────────────────────────────────────────
         for sig in (signal.SIGTERM, signal.SIGINT):
-            self._loop.add_signal_handler(sig, self._request_shutdown)
+            try:
+                self._loop.add_signal_handler(sig, self._request_shutdown)
+            except NotImplementedError:
+                pass
 
         # ── Start components ────────────────────────────────────────────────
         mqtt_client.start()
@@ -283,7 +286,10 @@ async def _patched_run(self: FogApplication) -> None:
     _mqtt_ref = mqtt_client
 
     for sig in (signal.SIGTERM, signal.SIGINT):
-        self._loop.add_signal_handler(sig, self._request_shutdown)
+        try:
+            self._loop.add_signal_handler(sig, self._request_shutdown)
+        except NotImplementedError:
+            pass
 
     mqtt_client.start()
 
