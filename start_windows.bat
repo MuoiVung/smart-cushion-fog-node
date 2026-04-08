@@ -1,51 +1,59 @@
 @echo off
 setlocal
+chcp 65001 >nul
 
 echo ==============================================================
-echo Smart Cushion Fog Node - Windows Native Setup (Without Docker)
+echo Smart Cushion Fog Node - Windows Native Setup
 echo ==============================================================
 
 :: Check for Python installation
 python --version >nul 2>&1
-IF %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Python is not installed or not in the system PATH.
-    echo Please install Python 3.9 or higher from https://www.python.org/downloads/
-    pause
-    exit /b 1
+if %errorlevel% equ 0 (
+    set PYTHON_CMD=python
+    goto :python_found
 )
 
-:: Check if .env file exists, if not copy from example
-if not exist .env (
-    if exist .env.example (
-        echo [INFO] .env file not found. Creating one from .env.example...
-        copy .env.example .env
-        echo [INFO] A default .env file has been created. Please edit it with your keys later!
-    )
+py --version >nul 2>&1
+if %errorlevel% equ 0 (
+    set PYTHON_CMD=py
+    goto :python_found
 )
 
-:: Create Virtual Environment if it doesn't exist
-IF NOT EXIST "venv" (
-    echo [INFO] Creating Python Virtual Environment (venv)...
-    python -m venv venv
-) ELSE (
-    echo [INFO] Python Virtual Environment already exists.
-)
+echo [ERROR] Python is not installed.
+pause
+exit /b 1
+
+:python_found
+echo [INFO] Using Python command: %PYTHON_CMD%
+
+:: Check if .env file exists
+if exist .env goto :env_exists
+if not exist .env.example goto :env_exists
+echo [INFO] Creating .env from .env.example
+copy .env.example .env
+:env_exists
+
+:: Create Virtual Environment
+if exist "venv\Scripts\python.exe" goto :venv_exists
+echo [INFO] Creating Python Virtual Environment
+%PYTHON_CMD% -m venv venv
+:venv_exists
 
 :: Activate Virtual Environment
-echo [INFO] Activating Virtual Environment...
+echo [INFO] Activating Virtual Environment
 call venv\Scripts\activate.bat
 
 :: Install Requirements
-echo [INFO] Upgrading pip...
+echo [INFO] Upgrading pip
 python -m pip install --upgrade pip >nul
 
-echo [INFO] Installing main dependencies...
-pip install -r requirements.txt
+echo [INFO] Installing main dependencies
+python -m pip install -r requirements.txt -q
 
-echo [INFO] Installing launcher dependencies...
-pip install -r launcher\requirements.txt
+echo [INFO] Installing launcher dependencies
+python -m pip install -r launcher\requirements.txt -q
 
-echo [INFO] Setup complete! Starting the application...
+echo [INFO] Setup complete! Starting the application
 echo ==============================================================
 
 :: Run the application
