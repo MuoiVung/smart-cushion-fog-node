@@ -98,8 +98,13 @@ class DataCollectorPanel(ctk.CTkFrame):
         columns = [
             ("Time", "time", True),
             ("FSR Front Left", "fsr_front_left", True),
+            ("FSR Front Mid", "fsr_front_mid", True),
             ("FSR Front Right", "fsr_front_right", True),
+            ("FSR Mid Left", "fsr_mid_left", True),
+            ("FSR Center", "fsr_center", True),
+            ("FSR Mid Right", "fsr_mid_right", True),
             ("FSR Back Left", "fsr_back_left", True),
+            ("FSR Back Mid", "fsr_back_mid", True),
             ("FSR Back Right", "fsr_back_right", True),
             ("Temperature", "temperature", True),
             ("Person Present", "person_present", True),
@@ -113,7 +118,7 @@ class DataCollectorPanel(ctk.CTkFrame):
             cb = ctk.CTkCheckBox(frame, text=name, variable=var)
             cb.grid(row=row_idx, column=col_idx, padx=16, pady=6, sticky="w")
             col_idx += 1
-            if col_idx > 2:
+            if col_idx > 3:
                 col_idx = 0
                 row_idx += 1
 
@@ -248,8 +253,13 @@ class DataCollectorPanel(ctk.CTkFrame):
             col_map = {
                 "time": "Time",
                 "fsr_front_left": "FSR Front Left",
+                "fsr_front_mid": "FSR Front Mid",
                 "fsr_front_right": "FSR Front Right",
+                "fsr_mid_left": "FSR Mid Left",
+                "fsr_center": "FSR Center",
+                "fsr_mid_right": "FSR Mid Right",
                 "fsr_back_left": "FSR Back Left",
+                "fsr_back_mid": "FSR Back Mid",
                 "fsr_back_right": "FSR Back Right",
                 "temperature": "Temperature",
                 "person_present": "Person Present",
@@ -295,8 +305,13 @@ class DataCollectorPanel(ctk.CTkFrame):
             
             sensors = payload_dict.get("sensors", {})
             row["fsr_front_left"] = sensors.get("fsr_front_left", 0)
+            row["fsr_front_mid"] = sensors.get("fsr_front_mid", 0)
             row["fsr_front_right"] = sensors.get("fsr_front_right", 0)
+            row["fsr_mid_left"] = sensors.get("fsr_mid_left", 0)
+            row["fsr_center"] = sensors.get("fsr_center", 0)
+            row["fsr_mid_right"] = sensors.get("fsr_mid_right", 0)
             row["fsr_back_left"] = sensors.get("fsr_back_left", 0)
+            row["fsr_back_mid"] = sensors.get("fsr_back_mid", 0)
             row["fsr_back_right"] = sensors.get("fsr_back_right", 0)
             row["temperature"] = sensors.get("temperature", 0.0)
             

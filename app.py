@@ -32,7 +32,7 @@ from core.cloud_sync import CloudSync
 from core.mqtt_client import MQTTClient
 from core.session_manager import SessionManager
 from core.websocket_server import WebSocketServer
-from data.schema import ControlCommand, PostureLabel, RawMessage, WebSocketBroadcast
+from data.schema import ControlCommand, PostureLabel, RawMessage, WebSocketBroadcast, AggregatedSensorReading
 from utils.logger import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,7 @@ class FogApplication:
         self._message_queue: asyncio.Queue[bytes] = asyncio.Queue()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._running = False
+        self._current_sensors = AggregatedSensorReading()
 
         # ── Component initialisation ────────────────────────────────────────
         # (MQTT client needs the loop reference; we pass it in run())
@@ -175,7 +176,7 @@ class FogApplication:
           6. Send vibration command if threshold exceeded.
           7. Broadcast result to WebSocket clients.
         """
-        # Step 1 – Parse + validate
+        # Step 1 – Parse + validate partial payload
         try:
             raw_dict = json.loads(raw_bytes)
             raw_msg  = RawMessage.model_validate(raw_dict)
@@ -183,7 +184,12 @@ class FogApplication:
             logger.warning(f"Invalid sensor message, skipping: {exc}")
             return
 
-        sensors = raw_msg.sensors
+        # Update aggregated state with new values (ignore None)
+        updated_data = {k: v for k, v in raw_msg.sensors.model_dump().items() if v is not None}
+        for k, v in updated_data.items():
+            setattr(self._current_sensors, k, v)
+
+        sensors = self._current_sensors
 
         # Step 2 – Human presence detection
         person_detected = self._preprocessor.is_person_present(sensors)

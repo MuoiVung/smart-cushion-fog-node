@@ -18,18 +18,18 @@ class TestInferenceEngineStub:
         assert engine.using_stub is True
 
     def test_predict_returns_tuple(self, engine):
-        features = np.array([0.5, 0.5, 0.5, 0.5], dtype=np.float32)
+        features = np.array([0.5]*9, dtype=np.float32)
         result = engine.predict(features)
         assert isinstance(result, tuple)
         assert len(result) == 2
 
     def test_predicted_label_is_posture_label(self, engine):
-        features = np.array([0.5, 0.5, 0.5, 0.5], dtype=np.float32)
+        features = np.array([0.5]*9, dtype=np.float32)
         label, conf = engine.predict(features)
         assert isinstance(label, PostureLabel)
 
     def test_confidence_in_unit_range(self, engine):
-        features = np.array([0.8, 0.1, 0.8, 0.1], dtype=np.float32)
+        features = np.array([0.8, 0.8, 0.8, 0.1, 0.1, 0.1, 0.8, 0.8, 0.8], dtype=np.float32)
         _, conf = engine.predict(features)
         assert 0.0 <= conf <= 1.0
 
@@ -37,37 +37,37 @@ class TestInferenceEngineStub:
 class TestRuleBasedClassifier:
     """Test the heuristic rule-based classifier directly."""
 
-    def _predict(self, tl, tr, bl, br):
-        features = np.array([tl, tr, bl, br], dtype=np.float32)
+    def _predict(self, fl, fm, fr, ml, mc, mr, bl, bm, br):
+        features = np.array([fl, fm, fr, ml, mc, mr, bl, bm, br], dtype=np.float32)
         return InferenceEngine._rule_based_predict(features)
 
     def test_balanced_is_correct(self):
-        label, _ = self._predict(0.5, 0.5, 0.5, 0.5)
+        label, _ = self._predict(0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
         assert label == PostureLabel.CORRECT
 
     def test_lean_left_detected(self):
         # Much more weight on left (TL + BL) than right (TR + BR)
-        label, conf = self._predict(0.9, 0.1, 0.9, 0.1)
+        label, conf = self._predict(0.9, 0.1, 0.1, 0.9, 0.1, 0.1, 0.9, 0.1, 0.1)
         assert label == PostureLabel.LEAN_LEFT
         assert conf > 0.5
 
     def test_lean_right_detected(self):
-        label, conf = self._predict(0.1, 0.9, 0.1, 0.9)
+        label, conf = self._predict(0.1, 0.1, 0.9, 0.1, 0.1, 0.9, 0.1, 0.1, 0.9)
         assert label == PostureLabel.LEAN_RIGHT
         assert conf > 0.5
 
     def test_slouch_forward_detected(self):
         # More weight on front (TL + TR) than back (BL + BR)
-        label, conf = self._predict(0.9, 0.9, 0.1, 0.1)
+        label, conf = self._predict(0.9, 0.9, 0.9, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1)
         assert label == PostureLabel.SLOUCH_FORWARD
         assert conf > 0.5
 
     def test_lean_back_detected(self):
-        label, conf = self._predict(0.1, 0.1, 0.9, 0.9)
+        label, conf = self._predict(0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.9, 0.9, 0.9)
         assert label == PostureLabel.LEAN_BACK
         assert conf > 0.5
 
     def test_near_zero_total_returns_correct(self):
-        label, _ = self._predict(0.0, 0.01, 0.0, 0.005)
+        label, _ = self._predict(0.0, 0.0, 0.0, 0.01, 0.0, 0.005, 0.0, 0.0, 0.0)
         # Below the negligible-total guard → CORRECT
         assert label == PostureLabel.CORRECT

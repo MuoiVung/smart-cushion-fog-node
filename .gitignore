@@ -11,6 +11,7 @@
 *.p12
 *.pfx
 certs/
+tools/esp32_secrets.h
 
 # ── Mosquitto data (generated at runtime) ─────────────────
 mosquitto/data/

@@ -12,35 +12,44 @@ class DashboardPanel(ctk.CTkFrame):
         
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
+        self.grid_columnconfigure(2, weight=1)
         
         # ── State ──────────────────────────────────────────────────────────
         self.posture_label = ctk.CTkLabel(
             self, text="Waiting for data...", 
             font=ctk.CTkFont(size=24, weight="bold")
         )
-        self.posture_label.grid(row=0, column=0, columnspan=2, pady=(20, 10))
+        self.posture_label.grid(row=0, column=0, columnspan=3, pady=(20, 10))
         
         self.confidence_label = ctk.CTkLabel(
             self, text="Confidence: --%", 
             font=ctk.CTkFont(size=14), text_color="gray"
         )
-        self.confidence_label.grid(row=1, column=0, columnspan=2, pady=(0, 20))
+        self.confidence_label.grid(row=1, column=0, columnspan=3, pady=(0, 20))
 
         # ── Features Grid (Relative Percentages) ───────────────────────────
         features_frame = ctk.CTkFrame(self, fg_color="#161b22", corner_radius=12)
-        features_frame.grid(row=2, column=0, columnspan=2, padx=40, sticky="ew")
+        features_frame.grid(row=2, column=0, columnspan=3, padx=40, sticky="ew")
         features_frame.grid_columnconfigure(0, weight=1)
         features_frame.grid_columnconfigure(1, weight=1)
-        
+        features_frame.grid_columnconfigure(2, weight=1)
+
         ctk.CTkLabel(
             features_frame, text="Processed AI Features (Relative Pressure %)",
             font=ctk.CTkFont(size=12, weight="bold"), text_color="gray"
-        ).grid(row=0, column=0, columnspan=2, pady=(10, 10))
+        ).grid(row=0, column=0, columnspan=3, pady=(10, 10))
 
         self.fl_bar = self._create_feature_bar(features_frame, "Front Left", 1, 0)
-        self.fr_bar = self._create_feature_bar(features_frame, "Front Right", 1, 1)
-        self.bl_bar = self._create_feature_bar(features_frame, "Back Left", 2, 0)
-        self.br_bar = self._create_feature_bar(features_frame, "Back Right", 2, 1)
+        self.fm_bar = self._create_feature_bar(features_frame, "Front Mid", 1, 1)
+        self.fr_bar = self._create_feature_bar(features_frame, "Front Right", 1, 2)
+        
+        self.ml_bar = self._create_feature_bar(features_frame, "Mid Left", 2, 0)
+        self.mc_bar = self._create_feature_bar(features_frame, "Center", 2, 1)
+        self.mr_bar = self._create_feature_bar(features_frame, "Mid Right", 2, 2)
+
+        self.bl_bar = self._create_feature_bar(features_frame, "Back Left", 3, 0)
+        self.bm_bar = self._create_feature_bar(features_frame, "Back Mid", 3, 1)
+        self.br_bar = self._create_feature_bar(features_frame, "Back Right", 3, 2)
 
     def _create_feature_bar(self, parent, name, row, col):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
@@ -62,8 +71,13 @@ class DashboardPanel(ctk.CTkFrame):
                 self.posture_label.configure(text="No Person Detected", text_color="gray")
                 self.confidence_label.configure(text="Confidence: --%")
                 self._update_bar(self.fl_bar, "Front Left", 0.0)
+                self._update_bar(self.fm_bar, "Front Mid", 0.0)
                 self._update_bar(self.fr_bar, "Front Right", 0.0)
+                self._update_bar(self.ml_bar, "Mid Left", 0.0)
+                self._update_bar(self.mc_bar, "Center", 0.0)
+                self._update_bar(self.mr_bar, "Mid Right", 0.0)
                 self._update_bar(self.bl_bar, "Back Left", 0.0)
+                self._update_bar(self.bm_bar, "Back Mid", 0.0)
                 self._update_bar(self.br_bar, "Back Right", 0.0)
                 return
 
@@ -82,11 +96,16 @@ class DashboardPanel(ctk.CTkFrame):
             self.confidence_label.configure(text=f"Confidence: {int(confidence * 100)}%")
 
             features = payload_dict.get("features")
-            if features and len(features) == 4:
+            if features and len(features) == 9:
                 self._update_bar(self.fl_bar, "Front Left", features[0])
-                self._update_bar(self.fr_bar, "Front Right", features[1])
-                self._update_bar(self.bl_bar, "Back Left", features[2])
-                self._update_bar(self.br_bar, "Back Right", features[3])
+                self._update_bar(self.fm_bar, "Front Mid", features[1])
+                self._update_bar(self.fr_bar, "Front Right", features[2])
+                self._update_bar(self.ml_bar, "Mid Left", features[3])
+                self._update_bar(self.mc_bar, "Center", features[4])
+                self._update_bar(self.mr_bar, "Mid Right", features[5])
+                self._update_bar(self.bl_bar, "Back Left", features[6])
+                self._update_bar(self.bm_bar, "Back Mid", features[7])
+                self._update_bar(self.br_bar, "Back Right", features[8])
 
         except Exception as e:
             pass

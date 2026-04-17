@@ -36,26 +36,35 @@ class PostureLabel(str, Enum):
 
 class SensorReading(BaseModel):
     """
-    Raw sensor values from the ESP32 hardware.
-
+    Partial raw sensor values from the ESP32 hardware.
+    Since sensors are split between 2 ESP32s, fields are optional.
+    
     FSR sensors (FSR402 - Interlink Electronics):
       - Return raw 12-bit ADC values via ESP32 analogRead() (range: 0–4095).
-      - 0    = no pressure / unloaded.
-      - 4095 = maximum pressure (ADC saturated).
-      - Typical seated values observed: ~2400–3100.
-
-    Temperature:
-      - Already converted to Celsius (°C) on the ESP32 before sending.
-      - Sensor: NTC thermistor or equivalent (e.g. DS18B20 / DHT22).
-      - Empty cushion ≈ room temperature (20–25 °C).
-      - Occupied cushion ≈ body surface temperature (32–37 °C).
-      - Person detection threshold in Preprocessor: 30.0 °C (configurable).
     """
-    fsr_front_left:  int   = Field(..., ge=0, le=4095, description="FSR402 front-left raw ADC (0–4095)")
-    fsr_front_right: int   = Field(..., ge=0, le=4095, description="FSR402 front-right raw ADC (0–4095)")
-    fsr_back_left:   int   = Field(..., ge=0, le=4095, description="FSR402 back-left raw ADC (0–4095)")
-    fsr_back_right:  int   = Field(..., ge=0, le=4095, description="FSR402 back-right raw ADC (0–4095)")
-    temperature:     float = Field(..., ge=-40.0, le=125.0, description="Surface temperature in °C (pre-converted on ESP32)")
+    fsr_front_left:  int | None = Field(default=None, ge=0, le=4095)
+    fsr_front_mid:   int | None = Field(default=None, ge=0, le=4095)
+    fsr_front_right: int | None = Field(default=None, ge=0, le=4095)
+    fsr_mid_left:    int | None = Field(default=None, ge=0, le=4095)
+    fsr_center:      int | None = Field(default=None, ge=0, le=4095)
+    fsr_mid_right:   int | None = Field(default=None, ge=0, le=4095)
+    fsr_back_left:   int | None = Field(default=None, ge=0, le=4095)
+    fsr_back_mid:    int | None = Field(default=None, ge=0, le=4095)
+    fsr_back_right:  int | None = Field(default=None, ge=0, le=4095)
+    temperature:     float | None = Field(default=None, ge=-40.0, le=125.0)
+
+class AggregatedSensorReading(BaseModel):
+    """Aggregated state from all 9 FSR sensors + temperature."""
+    fsr_front_left:  int = Field(default=0, ge=0, le=4095)
+    fsr_front_mid:   int = Field(default=0, ge=0, le=4095)
+    fsr_front_right: int = Field(default=0, ge=0, le=4095)
+    fsr_mid_left:    int = Field(default=0, ge=0, le=4095)
+    fsr_center:      int = Field(default=0, ge=0, le=4095)
+    fsr_mid_right:   int = Field(default=0, ge=0, le=4095)
+    fsr_back_left:   int = Field(default=0, ge=0, le=4095)
+    fsr_back_mid:    int = Field(default=0, ge=0, le=4095)
+    fsr_back_right:  int = Field(default=0, ge=0, le=4095)
+    temperature:     float = Field(default=25.0, ge=-40.0, le=125.0)
 
 
 class RawMessage(BaseModel):
@@ -114,7 +123,7 @@ class WebSocketBroadcast(BaseModel):
     posture:         PostureLabel
     confidence:      float        = Field(..., ge=0.0, le=1.0)
     person_detected: bool
-    sensors:         SensorReading
+    sensors:         AggregatedSensorReading
     features:        list[float] | None = Field(default=None, description="Processed AI features (0.0 to 1.0)")
     alert_sent:      bool         = Field(description="True if vibration was triggered this cycle")
 

@@ -1,30 +1,28 @@
 /**
- * Smart Cushion - ESP32 Firmware Sample
+ * Smart Cushion - ESP32 #1 Firmware
  * 
  * Hardware: ESP32 (e.g., ESP-32S / DOIT DevKit V1)
  * Libraries required:
  *  - PubSubClient (by Nick O'Leary)
  *  - ArduinoJson (by Benoit Blanchon)
  * 
- * This sketch simulates FSR sensor data and connects to the Fog Node 
- * via MQTT. It also listens for 'vibrate' commands from the Fog Node.
+ * Function: Reads the 4 corner FSR sensors and the NTC temperature sensor,
+ * then publishes to the Fog Node MQTT broker.
  */
 
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include "../esp32_secrets.h"
 
 // ==========================================
-// --- CONFIGURATION (Change these) ---
-const char* ssid        = "YOUR_WIFI_SSID";
-const char* password    = "YOUR_WIFI_PASSWORD";
-
-// Use mDNS (e.g., "my-macbook.local") or fixed IP of your Fog Node machine
-const char* mqtt_server = "fognode.local"; 
-
-// Credentials from your Fog Node .env file
-const char* mqtt_user   = "fognode";
-const char* mqtt_pass   = "YOUR_MQTT_PASSWORD";
+// --- HARWARE PINS ---
+// Both ESP32s use the exact same pins for reading
+#define PIN_SENSOR_1 32
+#define PIN_SENSOR_2 33
+#define PIN_SENSOR_3 34
+#define PIN_SENSOR_4 35
+#define PIN_SENSOR_5 36 // NTC on ESP1, FSR on ESP2
 // ==========================================
 
 const int mqtt_port = 1883;
@@ -37,14 +35,17 @@ PubSubClient client(espClient);
 unsigned long lastMsg = 0;
 
 void setup() {
-  // Built-in LED acts as a vibrator simulator
   pinMode(LED_BUILTIN, OUTPUT); 
   digitalWrite(LED_BUILTIN, LOW);
   
   Serial.begin(115200);
-  
-  // Use floating pin noise for better random numbers
-  randomSeed(analogRead(0));
+
+  // Setup pins
+  pinMode(PIN_SENSOR_1, INPUT);
+  pinMode(PIN_SENSOR_2, INPUT);
+  pinMode(PIN_SENSOR_3, INPUT);
+  pinMode(PIN_SENSOR_4, INPUT);
+  pinMode(PIN_SENSOR_5, INPUT);
 
   setup_wifi();
   
@@ -96,15 +97,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
 }
 
-/**
- * Connect/Reconnect to Mosquitto Broker
- */
 void reconnect() {
   while (!client.connected()) {
     Serial.printf("\nAttempting MQTT connection to '%s'...\n", mqtt_server);
     
-    // Unique ID for each connection
-    String clientId = "ESP32Cushion-";
+    String clientId = "ESP32-1-Cushion-";
     clientId += String(random(0xffff), HEX);
     
     if (client.connect(clientId.c_str(), mqtt_user, mqtt_pass)) {
@@ -119,6 +116,21 @@ void reconnect() {
   }
 }
 
+float convertNTCToTemperature(int analogValue) {
+  // Dummy conversion for NTC
+  if(analogValue == 0) return 25.0;
+  float resistance = (4095.0 / analogValue) - 1.0;
+  resistance = 10000.0 / resistance;
+  float steinhart;
+  steinhart = resistance / 10000.0;     
+  steinhart = log(steinhart);                  
+  steinhart /= 3950.0;                  
+  steinhart += 1.0 / (25.0 + 273.15); 
+  steinhart = 1.0 / steinhart;                 
+  steinhart -= 273.15;                         
+  return steinhart;
+}
+
 void loop() {
   if (!client.connected()) {
     reconnect();
@@ -127,33 +139,37 @@ void loop() {
 
   unsigned long now = millis();
   
-  // Publish simulated raw data every 1 second
+  // Publish to MQTT every 1 second
   if (now - lastMsg > 1000) {
     lastMsg = now;
 
-    // Simulate 4 FSR sensors
-    int t_l = random(500, 4000);
-    int t_r = random(500, 4000);
-    int b_l = random(500, 4000);
-    int b_r = random(500, 4000);
+    // Read real FSR pins
+    int fl = analogRead(PIN_SENSOR_1);
+    int fr = analogRead(PIN_SENSOR_2);
+    int bl = analogRead(PIN_SENSOR_3);
+    int br = analogRead(PIN_SENSOR_4);
+    
+    // Read NTC pin and convert
+    int ntcRaw = analogRead(PIN_SENSOR_5); 
+    float temp = convertNTCToTemperature(ntcRaw);
 
     StaticJsonDocument<256> doc;
-    doc["device_id"] = "esp32-real-hardware";
+    doc["device_id"] = "esp32-1";
     doc["timestamp"] = now / 1000.0;
 
     JsonObject sensors = doc.createNestedObject("sensors");
-    sensors["fsr_front_left"]  = t_l;
-    sensors["fsr_front_right"] = t_r;
-    sensors["fsr_back_left"]   = b_l;
-    sensors["fsr_back_right"]  = b_r;
-    sensors["temperature"] = 36.5; 
+    sensors["fsr_front_left"]  = fl;
+    sensors["fsr_front_right"] = fr;
+    sensors["fsr_back_left"]   = bl;
+    sensors["fsr_back_right"]  = br;
+    sensors["temperature"]     = temp; 
 
     char buffer[256];
     serializeJson(doc, buffer);
     
     client.publish(topic_raw, buffer);
     
-    Serial.print("Published to Fog: ");
+    Serial.print("Published ESP1: ");
     Serial.println(buffer);
   }
 }

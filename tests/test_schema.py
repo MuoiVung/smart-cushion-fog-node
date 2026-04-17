@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 from data.schema import (
-    SensorReading, RawMessage, ControlCommand,
+    SensorReading, AggregatedSensorReading, RawMessage, ControlCommand,
     CloudSyncPayload, PostureCounts, PostureLabel,
 )
 
@@ -19,6 +19,7 @@ class TestSensorReading:
         )
         assert s.fsr_front_left == 512
         assert s.temperature == 36.4
+        assert s.fsr_front_mid is None
 
     def test_fsr_out_of_range_raises(self):
         with pytest.raises(ValidationError):
@@ -52,6 +53,27 @@ class TestSensorReading:
         )
         assert s.fsr_front_right == 4095
 
+class TestAggregatedSensorReading:
+    def test_default_values(self):
+        s = AggregatedSensorReading()
+        assert s.fsr_front_left == 0
+        assert s.temperature == 25.0
+
+    def test_valid_reading(self):
+        s = AggregatedSensorReading(
+            fsr_front_left=512, fsr_front_mid=510, fsr_front_right=498,
+            fsr_mid_left=500, fsr_center=500, fsr_mid_right=500,
+            fsr_back_left=601, fsr_back_mid=590, fsr_back_right=587,
+            temperature=36.4,
+        )
+        assert s.fsr_front_left == 512
+        assert s.fsr_center == 500
+        assert s.temperature == 36.4
+
+    def test_negative_fsr_raises(self):
+        with pytest.raises(ValidationError):
+            AggregatedSensorReading(fsr_front_left=-1)
+
 
 # ── RawMessage ─────────────────────────────────────────────────────────────
 
@@ -70,6 +92,7 @@ class TestRawMessage:
         )
         assert msg.device_id == "esp32-01"
         assert msg.sensors.fsr_front_left == 500
+        assert msg.sensors.fsr_center is None
 
     def test_missing_field_raises(self):
         with pytest.raises(ValidationError):

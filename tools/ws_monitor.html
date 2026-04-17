@@ -204,10 +204,10 @@
       position: absolute;
       inset: 0;
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: 1fr 1fr;
-      gap: 6px;
-      padding: 20px;
+      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-rows: 1fr 1fr 1fr;
+      gap: 4px;
+      padding: 10px;
     }
 
     .fsr-dot {
@@ -405,8 +405,13 @@
         </svg>
         <div class="fsr-grid">
           <div class="fsr-dot" id="dotFL" title="Front Left">FL</div>
+          <div class="fsr-dot" id="dotFM" title="Front Mid">FM</div>
           <div class="fsr-dot" id="dotFR" title="Front Right">FR</div>
+          <div class="fsr-dot" id="dotML" title="Mid Left">ML</div>
+          <div class="fsr-dot" id="dotMC" title="Center">C</div>
+          <div class="fsr-dot" id="dotMR" title="Mid Right">MR</div>
           <div class="fsr-dot" id="dotBL" title="Back Left">BL</div>
+          <div class="fsr-dot" id="dotBM" title="Back Mid">BM</div>
           <div class="fsr-dot" id="dotBR" title="Back Right">BR</div>
         </div>
       </div>
@@ -433,14 +438,39 @@
         <div class="sensor-val" id="valFL">—</div>
       </div>
       <div class="sensor-row">
+        <div class="sensor-name">FSR Front-Mid</div>
+        <div class="sensor-bar-wrap"><div class="sensor-bar" id="barFM" style="width:0%"></div></div>
+        <div class="sensor-val" id="valFM">—</div>
+      </div>
+      <div class="sensor-row">
         <div class="sensor-name">FSR Front-Right</div>
         <div class="sensor-bar-wrap"><div class="sensor-bar" id="barFR" style="width:0%"></div></div>
         <div class="sensor-val" id="valFR">—</div>
       </div>
       <div class="sensor-row">
+        <div class="sensor-name">FSR Mid-Left</div>
+        <div class="sensor-bar-wrap"><div class="sensor-bar" id="barML" style="width:0%"></div></div>
+        <div class="sensor-val" id="valML">—</div>
+      </div>
+      <div class="sensor-row">
+        <div class="sensor-name">FSR Center</div>
+        <div class="sensor-bar-wrap"><div class="sensor-bar" id="barMC" style="width:0%"></div></div>
+        <div class="sensor-val" id="valMC">—</div>
+      </div>
+      <div class="sensor-row">
+        <div class="sensor-name">FSR Mid-Right</div>
+        <div class="sensor-bar-wrap"><div class="sensor-bar" id="barMR" style="width:0%"></div></div>
+        <div class="sensor-val" id="valMR">—</div>
+      </div>
+      <div class="sensor-row">
         <div class="sensor-name">FSR Back-Left</div>
         <div class="sensor-bar-wrap"><div class="sensor-bar" id="barBL" style="width:0%"></div></div>
         <div class="sensor-val" id="valBL">—</div>
+      </div>
+      <div class="sensor-row">
+        <div class="sensor-name">FSR Back-Mid</div>
+        <div class="sensor-bar-wrap"><div class="sensor-bar" id="barBM" style="width:0%"></div></div>
+        <div class="sensor-val" id="valBM">—</div>
       </div>
       <div class="sensor-row">
         <div class="sensor-name">FSR Back-Right</div>
@@ -620,8 +650,13 @@ function updateSensors(s) {
     $(id + 'Val').textContent = unit === '°C' ? `${v.toFixed(1)}°C` : v;
   };
   update('FL',   'fsr_front_left',  FSR_MAX, '');
+  update('FM',   'fsr_front_mid',   FSR_MAX, '');
   update('FR',   'fsr_front_right', FSR_MAX, '');
+  update('ML',   'fsr_mid_left',    FSR_MAX, '');
+  update('MC',   'fsr_center',      FSR_MAX, '');
+  update('MR',   'fsr_mid_right',   FSR_MAX, '');
   update('BL',   'fsr_back_left',   FSR_MAX, '');
+  update('BM',   'fsr_back_mid',    FSR_MAX, '');
   update('BR',   'fsr_back_right',  FSR_MAX, '');
   update('Temp', 'temperature',     TEMP_MAX, '°C');
 }
@@ -629,8 +664,13 @@ function updateSensors(s) {
 function updateFSRDots(s) {
   const keys = [
     ['dotFL', 'fsr_front_left'],
+    ['dotFM', 'fsr_front_mid'],
     ['dotFR', 'fsr_front_right'],
+    ['dotML', 'fsr_mid_left'],
+    ['dotMC', 'fsr_center'],
+    ['dotMR', 'fsr_mid_right'],
     ['dotBL', 'fsr_back_left'],
+    ['dotBM', 'fsr_back_mid'],
     ['dotBR', 'fsr_back_right'],
   ];
   keys.forEach(([id, key]) => {

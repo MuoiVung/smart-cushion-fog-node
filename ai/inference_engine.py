@@ -10,7 +10,7 @@ to a built-in rule-based heuristic classifier so the system remains
 fully functional during development and before a model is trained.
 
 Model architecture (PostureMLP):
-  Input  layer : 4 neurons  (normalised FSR values)
+  Input  layer : 9 neurons  (normalised FSR values, 3x3 matrix)
   Hidden layer : 32 → 16 neurons (ReLU + BatchNorm + Dropout)
   Output layer : 5 neurons  (posture class logits)
 
@@ -63,7 +63,7 @@ class PostureMLP(nn.Module):
     """
 
     NUM_CLASSES = 5
-    INPUT_DIM   = 4
+    INPUT_DIM   = 9
 
     def __init__(self) -> None:
         super().__init__()
@@ -80,7 +80,7 @@ class PostureMLP(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x: Float tensor of shape (batch_size, 4).
+            x: Float tensor of shape (batch_size, 9).
         Returns:
             Logit tensor of shape (batch_size, 5).
         """
@@ -120,11 +120,11 @@ class InferenceEngine:
 
     def predict(self, features: np.ndarray) -> Tuple[PostureLabel, float]:
         """
-        Predict posture from a normalised 4-element feature vector.
+        Predict posture from a normalised 9-element feature vector.
 
         Args:
-            features: numpy float32 array of shape (4,) with values in [0, 1].
-                      Order: [fsr_front_left, fsr_front_right, fsr_back_left, fsr_back_right]
+            features: numpy float32 array of shape (9,) with values in [0, 1].
+                      Order: [fl, fm, fr, ml, mc, mr, bl, bm, br]
 
         Returns:
             Tuple of (PostureLabel, confidence) where confidence ∈ [0.0, 1.0].
@@ -134,7 +134,7 @@ class InferenceEngine:
 
         # ── PyTorch inference ────────────────────────────────────────────
         with torch.no_grad():
-            x = torch.from_numpy(features).float().unsqueeze(0)  # shape: (1, 4)
+            x = torch.from_numpy(features).float().unsqueeze(0)  # shape: (1, 9)
             logits = self._model(x)                              # shape: (1, 5)
             probs = torch.softmax(logits, dim=-1)                # shape: (1, 5)
             predicted_idx = int(probs.argmax(dim=-1).item())
@@ -189,23 +189,23 @@ class InferenceEngine:
         the INCORRECT_POSTURE_ALERT_THRESHOLD setting.
 
         Args:
-            features: [fl, fr, bl, br] normalised in [0, 1].
+            features: [fl, fm, fr, ml, mc, mr, bl, bm, br] normalised in [0, 1].
 
         Returns:
             (PostureLabel, confidence) with confidence ∈ [0.35, 0.95].
         """
-        tl, tr, bl, br = features.tolist()
-        total = tl + tr + bl + br
+        fl, fm, fr, ml, mc, mr, bl, bm, br = features.tolist()
+        total = fl + fm + fr + ml + mc + mr + bl + bm + br
 
         # Treat negligible total pressure as unknown (should not happen if
         # person_detected is True, but guard against edge cases)
         if total < 0.02:
             return PostureLabel.CORRECT, 0.5
 
-        left  = tl + bl
-        right = tr + br
-        front = tl + tr
-        back  = bl + br
+        left  = fl + ml + bl
+        right = fr + mr + br
+        front = fl + fm + fr
+        back  = bl + bm + br
 
         # Normalised difference: positive → more weight on left/front side
         lr_diff = (left  - right) / (left  + right + 1e-6)

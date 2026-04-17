@@ -19,7 +19,7 @@ Design notes:
 
 import logging
 import numpy as np
-from data.schema import SensorReading
+from data.schema import AggregatedSensorReading
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ _FSR_MAX = 4095.0
 
 class Preprocessor:
     """
-    Converts raw SensorReading objects into normalised feature vectors
+    Converts aggregated SensorReadingState objects into normalised feature vectors
     ready for the AI inference engine.
 
     Hardware context:
@@ -46,7 +46,7 @@ class Preprocessor:
     ) -> None:
         """
         Args:
-            fsr_presence_threshold: Minimum total FSR ADC sum (all 4 sensors)
+            fsr_presence_threshold: Minimum total FSR ADC sum (all 9 sensors)
                 to consider a person as seated. Default 1000 is conservative
                 -- tune higher if the empty-cushion baseline sum is above this.
             temperature_threshold: Deprecated. Kept for compatibility but no
@@ -62,13 +62,13 @@ class Preprocessor:
 
     # -- Public API -----------------------------------------------------------
 
-    def is_person_present(self, sensors: SensorReading) -> bool:
+    def is_person_present(self, sensors: AggregatedSensorReading) -> bool:
         """
         Determine whether a human is sitting on the cushion.
 
-        Uses the SUM of all 4 FSR sensor readings as the pressure indicator.
+        Uses the SUM of all 9 FSR sensor readings as the pressure indicator.
         A person is considered present when:
-            fsr_front_left + fsr_front_right + fsr_back_left + fsr_back_right
+            fsr_front_left + fsr_front_mid + ... + fsr_back_right
             >= fsr_presence_threshold
 
         NOTE: Temperature is NOT used here because the onboard temperature
@@ -81,8 +81,13 @@ class Preprocessor:
         """
         total_pressure = (
             sensors.fsr_front_left
+            + sensors.fsr_front_mid
             + sensors.fsr_front_right
+            + sensors.fsr_mid_left
+            + sensors.fsr_center
+            + sensors.fsr_mid_right
             + sensors.fsr_back_left
+            + sensors.fsr_back_mid
             + sensors.fsr_back_right
         )
         present = total_pressure >= self._fsr_threshold
@@ -98,26 +103,31 @@ class Preprocessor:
             )
         return present
 
-    def extract_features(self, sensors: SensorReading) -> np.ndarray:
+    def extract_features(self, sensors: AggregatedSensorReading) -> np.ndarray:
         """
         Convert raw FSR pressure into a weight-independent relative percentage vector.
 
-        The returned array has shape (4,) with values representing the percentage
+        The returned array has shape (9,) with values representing the percentage
         of pressure on each sensor:
-            [fsr_front_left, fsr_front_right, fsr_back_left, fsr_back_right]
+            [fl, fm, fr, ml, mc, mr, bl, bm, br]
         The sum of the features will be exactly 1.0 if a person is seated.
 
         Args:
-            sensors: Validated SensorReading from the ESP32.
+            sensors: Validated AggregatedSensorReading from the ESP32.
 
         Returns:
-            numpy float32 array of shape (4,).
+            numpy float32 array of shape (9,).
         """
         raw = np.array(
             [
                 sensors.fsr_front_left,
+                sensors.fsr_front_mid,
                 sensors.fsr_front_right,
+                sensors.fsr_mid_left,
+                sensors.fsr_center,
+                sensors.fsr_mid_right,
                 sensors.fsr_back_left,
+                sensors.fsr_back_mid,
                 sensors.fsr_back_right,
             ],
             dtype=np.float32,
@@ -127,7 +137,7 @@ class Preprocessor:
         if total_pressure > 0:
             features = raw / total_pressure
         else:
-            features = np.zeros(4, dtype=np.float32)
+            features = np.zeros(9, dtype=np.float32)
 
         # Clip to [0, 1] as a safety guard
         features = np.clip(features, 0.0, 1.0)
