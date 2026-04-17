@@ -6,11 +6,11 @@ from data.schema import SensorReading, AggregatedSensorReading
 from ai.preprocessor import Preprocessor, _FSR_MAX
 
 
-def make_reading(fl=2000, fm=2000, fr=2000, ml=2000, mc=2000, mr=2000, bl=2000, bm=2000, br=2000, temp=20.5) -> AggregatedSensorReading:
+def make_reading(fl=0, fm=2000, fr=0, ml=2000, mm=2000, mr=2000, bl=0, bm=2000, br=0, temp=20.5) -> AggregatedSensorReading:
     """Helper: create an AggregatedSensorReading. Default temp=20.5 matches real ambient hardware."""
     return AggregatedSensorReading(
         fsr_front_left=fl, fsr_front_mid=fm, fsr_front_right=fr,
-        fsr_mid_left=ml, fsr_center=mc, fsr_mid_right=mr,
+        fsr_mid_left=ml, fsr_mid_mid=mm, fsr_mid_right=mr,
         fsr_back_left=bl, fsr_back_mid=bm, fsr_back_right=br,
         temperature=temp,
     )

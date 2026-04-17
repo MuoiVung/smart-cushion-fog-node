@@ -189,13 +189,13 @@ class InferenceEngine:
         the INCORRECT_POSTURE_ALERT_THRESHOLD setting.
 
         Args:
-            features: [fl, fm, fr, ml, mc, mr, bl, bm, br] normalised in [0, 1].
+            features: [fl, fm, fr, ml, mm, mr, bl, bm, br] normalised in [0, 1].
 
         Returns:
             (PostureLabel, confidence) with confidence ∈ [0.35, 0.95].
         """
-        fl, fm, fr, ml, mc, mr, bl, bm, br = features.tolist()
-        total = fl + fm + fr + ml + mc + mr + bl + bm + br
+        fl, fm, fr, ml, mm, mr, bl, bm, br = features.tolist()
+        total = fl + fm + fr + ml + mm + mr + bl + bm + br
 
         # Treat negligible total pressure as unknown (should not happen if
         # person_detected is True, but guard against edge cases)

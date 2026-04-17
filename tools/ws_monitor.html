@@ -408,7 +408,7 @@
           <div class="fsr-dot" id="dotFM" title="Front Mid">FM</div>
           <div class="fsr-dot" id="dotFR" title="Front Right">FR</div>
           <div class="fsr-dot" id="dotML" title="Mid Left">ML</div>
-          <div class="fsr-dot" id="dotMC" title="Center">C</div>
+          <div class="fsr-dot" id="dotMM" title="Mid Mid">MM</div>
           <div class="fsr-dot" id="dotMR" title="Mid Right">MR</div>
           <div class="fsr-dot" id="dotBL" title="Back Left">BL</div>
           <div class="fsr-dot" id="dotBM" title="Back Mid">BM</div>
@@ -453,9 +453,9 @@
         <div class="sensor-val" id="valML">—</div>
       </div>
       <div class="sensor-row">
-        <div class="sensor-name">FSR Center</div>
-        <div class="sensor-bar-wrap"><div class="sensor-bar" id="barMC" style="width:0%"></div></div>
-        <div class="sensor-val" id="valMC">—</div>
+        <div class="sensor-name">FSR Mid-Mid</div>
+        <div class="sensor-bar-wrap"><div class="sensor-bar" id="barMM" style="width:0%"></div></div>
+        <div class="sensor-val" id="valMM">—</div>
       </div>
       <div class="sensor-row">
         <div class="sensor-name">FSR Mid-Right</div>
@@ -484,9 +484,20 @@
       </div>
 
       <!-- Event Log -->
-      <div class="card-title" style="margin-top:0.5rem">Event Log</div>
-      <div class="log-container" id="logContainer">
-        <div class="log-entry log-info"><span class="log-time">—</span>Waiting for connection…</div>
+      <div class="card-title" style="margin-top:0.5rem">Raw Data & Event Logs (ESP32 ⇄ Fog)</div>
+      <div style="display: flex; gap: 8px;">
+        <div style="flex:1; display:flex; flex-direction:column; min-width: 0;">
+          <div style="font-size: 0.72rem; color: var(--muted); margin-bottom:4px; font-weight:bold;">ESP32-1 (Device ID: esp32-1)</div>
+          <div class="log-container" id="logContainer1">
+            <div class="log-entry log-info"><span class="log-time">—</span>Waiting for esp32-1 connection…</div>
+          </div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; min-width: 0;">
+          <div style="font-size: 0.72rem; color: var(--muted); margin-bottom:4px; font-weight:bold;">ESP32-2 (Device ID: esp32-2)</div>
+          <div class="log-container" id="logContainer2">
+            <div class="log-entry log-info"><span class="log-time">—</span>Waiting for esp32-2 connection…</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -531,16 +542,17 @@ const statusBadge    = $('statusBadge');
 const statusText     = $('statusText');
 const connectBtn     = $('connectBtn');
 const disconnectBtn  = $('disconnectBtn');
-const logContainer   = $('logContainer');
+const logContainer1  = $('logContainer1');
+const logContainer2  = $('logContainer2');
 
 // ── Connection ─────────────────────────────────────────────────────────────
 function connect() {
   const url   = $('wsUrl').value.trim();
   const token = $('wsToken').value.trim();
-  if (!url) { addLog('Please enter a WebSocket URL', 'alert'); return; }
+  if (!url) { logToBoth('Please enter a WebSocket URL', 'alert'); return; }
 
   setStatus('connecting', 'Connecting…');
-  addLog(`Connecting to ${url}…`);
+  logToBoth(`Connecting to ${url}…`);
 
   const headers = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -555,21 +567,21 @@ function connect() {
     setStatus('connected', 'Connected');
     connectBtn.disabled    = true;
     disconnectBtn.disabled = false;
-    addLog('WebSocket connected ✓', 'info');
+    logToBoth('WebSocket connected ✓', 'info');
   };
 
   ws.onmessage = e => handleMessage(e.data);
 
   ws.onerror = () => {
     setStatus('error', 'Connection Error');
-    addLog('WebSocket error – check URL and token', 'alert');
+    logToBoth('WebSocket error – check URL and token', 'alert');
   };
 
   ws.onclose = ev => {
     setStatus('', 'Disconnected');
     connectBtn.disabled    = false;
     disconnectBtn.disabled = true;
-    addLog(`Disconnected (code=${ev.code})`, ev.code === 1008 ? 'alert' : 'info');
+    logToBoth(`Disconnected (code=${ev.code})`, ev.code === 1008 ? 'alert' : 'info');
   };
 }
 
@@ -584,7 +596,7 @@ function handleMessage(raw) {
 
   // Ignore handshake messages
   if (data.type === 'connected') {
-    addLog(`Fog Node says: ${data.message}`, 'info');
+    logToBoth(`Fog Node says: ${data.message}`, 'info');
     return;
   }
 
@@ -614,9 +626,18 @@ function handleMessage(raw) {
   hzBuffer = hzBuffer.filter(t => now - t < 5000);
   $('statHz').textContent = (hzBuffer.length / 5).toFixed(1);
 
-  // Log notable events
+  // Log Raw events into appropriate tab
+  const triggerDev = data.trigger_device_id || 'unknown';
+  
+  if (triggerDev === 'esp32-1') {
+    addLog(`[ESP32→FOG] FL:${sensors.fsr_front_left||0} FR:${sensors.fsr_front_right||0} BL:${sensors.fsr_back_left||0} BR:${sensors.fsr_back_right||0} T:${sensors.temperature||0}°C`, 'info', logContainer1);
+  } else if (triggerDev === 'esp32-2') {
+    addLog(`[ESP32→FOG] FM:${sensors.fsr_front_mid||0} MM:${sensors.fsr_mid_mid||0} BM:${sensors.fsr_back_mid||0} ML:${sensors.fsr_mid_left||0} MR:${sensors.fsr_mid_right||0}`, 'info', logContainer2);
+  }
+
+  // Log alerts (vibraion goes to esp32-1 where the motor is)
   if (alerted) {
-    addLog(`ALERT → vibration sent (${formatPosture(posture)})`, 'alert');
+    addLog(`[FOG→ESP32] ⚡ VIBRATE COMMAND SENT (${formatPosture(posture)})`, 'alert', logContainer1);
   }
 }
 
@@ -653,7 +674,7 @@ function updateSensors(s) {
   update('FM',   'fsr_front_mid',   FSR_MAX, '');
   update('FR',   'fsr_front_right', FSR_MAX, '');
   update('ML',   'fsr_mid_left',    FSR_MAX, '');
-  update('MC',   'fsr_center',      FSR_MAX, '');
+  update('MM',   'fsr_mid_mid',     FSR_MAX, '');
   update('MR',   'fsr_mid_right',   FSR_MAX, '');
   update('BL',   'fsr_back_left',   FSR_MAX, '');
   update('BM',   'fsr_back_mid',    FSR_MAX, '');
@@ -667,7 +688,7 @@ function updateFSRDots(s) {
     ['dotFM', 'fsr_front_mid'],
     ['dotFR', 'fsr_front_right'],
     ['dotML', 'fsr_mid_left'],
-    ['dotMC', 'fsr_center'],
+    ['dotMM', 'fsr_mid_mid'],
     ['dotMR', 'fsr_mid_right'],
     ['dotBL', 'fsr_back_left'],
     ['dotBM', 'fsr_back_mid'],
@@ -694,15 +715,20 @@ function setStatus(cls, text) {
   statusText.textContent = text;
 }
 
-function addLog(msg, type = '') {
+function addLog(msg, type = '', container = logContainer1) {
   const time = new Date().toLocaleTimeString('en-US', { hour12: false });
   const entry = document.createElement('div');
   entry.className = `log-entry ${type ? 'log-' + type : ''}`;
   entry.innerHTML = `<span class="log-time">${time}</span>${escHtml(msg)}`;
-  logContainer.appendChild(entry);
-  logContainer.scrollTop = logContainer.scrollHeight;
-  // Keep only last 200 entries
-  while (logContainer.children.length > 200) logContainer.removeChild(logContainer.firstChild);
+  container.appendChild(entry);
+  container.scrollTop = container.scrollHeight;
+  // Keep only last 100 entries per box
+  while (container.children.length > 100) container.removeChild(container.firstChild);
+}
+
+function logToBoth(msg, type = '') {
+  addLog(msg, type, logContainer1);
+  addLog(msg, type, logContainer2);
 }
 
 function formatPosture(p) {

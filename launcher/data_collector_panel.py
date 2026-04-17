@@ -101,7 +101,7 @@ class DataCollectorPanel(ctk.CTkFrame):
             ("FSR Front Mid", "fsr_front_mid", True),
             ("FSR Front Right", "fsr_front_right", True),
             ("FSR Mid Left", "fsr_mid_left", True),
-            ("FSR Center", "fsr_center", True),
+            ("FSR Mid Mid", "fsr_mid_mid", True),
             ("FSR Mid Right", "fsr_mid_right", True),
             ("FSR Back Left", "fsr_back_left", True),
             ("FSR Back Mid", "fsr_back_mid", True),
@@ -256,7 +256,7 @@ class DataCollectorPanel(ctk.CTkFrame):
                 "fsr_front_mid": "FSR Front Mid",
                 "fsr_front_right": "FSR Front Right",
                 "fsr_mid_left": "FSR Mid Left",
-                "fsr_center": "FSR Center",
+                "fsr_mid_mid": "FSR Mid Mid",
                 "fsr_mid_right": "FSR Mid Right",
                 "fsr_back_left": "FSR Back Left",
                 "fsr_back_mid": "FSR Back Mid",
@@ -308,7 +308,7 @@ class DataCollectorPanel(ctk.CTkFrame):
             row["fsr_front_mid"] = sensors.get("fsr_front_mid", 0)
             row["fsr_front_right"] = sensors.get("fsr_front_right", 0)
             row["fsr_mid_left"] = sensors.get("fsr_mid_left", 0)
-            row["fsr_center"] = sensors.get("fsr_center", 0)
+            row["fsr_mid_mid"] = sensors.get("fsr_mid_mid", 0)
             row["fsr_mid_right"] = sensors.get("fsr_mid_right", 0)
             row["fsr_back_left"] = sensors.get("fsr_back_left", 0)
             row["fsr_back_mid"] = sensors.get("fsr_back_mid", 0)

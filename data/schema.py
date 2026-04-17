@@ -46,7 +46,7 @@ class SensorReading(BaseModel):
     fsr_front_mid:   int | None = Field(default=None, ge=0, le=4095)
     fsr_front_right: int | None = Field(default=None, ge=0, le=4095)
     fsr_mid_left:    int | None = Field(default=None, ge=0, le=4095)
-    fsr_center:      int | None = Field(default=None, ge=0, le=4095)
+    fsr_mid_mid:     int | None = Field(default=None, ge=0, le=4095)
     fsr_mid_right:   int | None = Field(default=None, ge=0, le=4095)
     fsr_back_left:   int | None = Field(default=None, ge=0, le=4095)
     fsr_back_mid:    int | None = Field(default=None, ge=0, le=4095)
@@ -59,7 +59,7 @@ class AggregatedSensorReading(BaseModel):
     fsr_front_mid:   int = Field(default=0, ge=0, le=4095)
     fsr_front_right: int = Field(default=0, ge=0, le=4095)
     fsr_mid_left:    int = Field(default=0, ge=0, le=4095)
-    fsr_center:      int = Field(default=0, ge=0, le=4095)
+    fsr_mid_mid:     int = Field(default=0, ge=0, le=4095)
     fsr_mid_right:   int = Field(default=0, ge=0, le=4095)
     fsr_back_left:   int = Field(default=0, ge=0, le=4095)
     fsr_back_mid:    int = Field(default=0, ge=0, le=4095)
@@ -126,6 +126,7 @@ class WebSocketBroadcast(BaseModel):
     sensors:         AggregatedSensorReading
     features:        list[float] | None = Field(default=None, description="Processed AI features (0.0 to 1.0)")
     alert_sent:      bool         = Field(description="True if vibration was triggered this cycle")
+    trigger_device_id: str        = Field(default="unknown", description="Which ESP32 triggered this broadcast")
 
 
 # ---------------------------------------------------------------------------

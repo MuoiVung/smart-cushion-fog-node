@@ -14,7 +14,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include "../esp32_secrets.h"
+#include "esp32_secrets.h"
 
 // ==========================================
 // --- HARWARE PINS ---
@@ -98,11 +98,12 @@ void loop() {
     lastMsg = now;
 
     // Read real FSR pins from inner cross
+    // Pin mapping: 32(FM), 33(MM/Center), 34(BM), 35(ML), 36(MR)
     int f_m = analogRead(PIN_SENSOR_1);
-    int m_l = analogRead(PIN_SENSOR_2);
-    int cen = analogRead(PIN_SENSOR_3);
-    int m_r = analogRead(PIN_SENSOR_4);
-    int b_m = analogRead(PIN_SENSOR_5);
+    int m_m = analogRead(PIN_SENSOR_2);
+    int b_m = analogRead(PIN_SENSOR_3);
+    int m_l = analogRead(PIN_SENSOR_4);
+    int m_r = analogRead(PIN_SENSOR_5);
 
     StaticJsonDocument<256> doc;
     doc["device_id"] = "esp32-2";
@@ -110,10 +111,10 @@ void loop() {
 
     JsonObject sensors = doc.createNestedObject("sensors");
     sensors["fsr_front_mid"] = f_m;
-    sensors["fsr_mid_left"]  = m_l;
-    sensors["fsr_center"]    = cen;
-    sensors["fsr_mid_right"] = m_r;
+    sensors["fsr_mid_mid"]   = m_m;
     sensors["fsr_back_mid"]  = b_m;
+    sensors["fsr_mid_left"]  = m_l;
+    sensors["fsr_mid_right"] = m_r;
 
     char buffer[256];
     serializeJson(doc, buffer);

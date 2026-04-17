@@ -84,7 +84,7 @@ class Preprocessor:
             + sensors.fsr_front_mid
             + sensors.fsr_front_right
             + sensors.fsr_mid_left
-            + sensors.fsr_center
+            + sensors.fsr_mid_mid
             + sensors.fsr_mid_right
             + sensors.fsr_back_left
             + sensors.fsr_back_mid
@@ -109,7 +109,7 @@ class Preprocessor:
 
         The returned array has shape (9,) with values representing the percentage
         of pressure on each sensor:
-            [fl, fm, fr, ml, mc, mr, bl, bm, br]
+            [fl, fm, fr, ml, mm, mr, bl, bm, br]
         The sum of the features will be exactly 1.0 if a person is seated.
 
         Args:
@@ -124,7 +124,7 @@ class Preprocessor:
                 sensors.fsr_front_mid,
                 sensors.fsr_front_right,
                 sensors.fsr_mid_left,
-                sensors.fsr_center,
+                sensors.fsr_mid_mid,
                 sensors.fsr_mid_right,
                 sensors.fsr_back_left,
                 sensors.fsr_back_mid,

@@ -37,8 +37,8 @@ class TestInferenceEngineStub:
 class TestRuleBasedClassifier:
     """Test the heuristic rule-based classifier directly."""
 
-    def _predict(self, fl, fm, fr, ml, mc, mr, bl, bm, br):
-        features = np.array([fl, fm, fr, ml, mc, mr, bl, bm, br], dtype=np.float32)
+    def _predict(self, fl, fm, fr, ml, mm, mr, bl, bm, br):
+        features = np.array([fl, fm, fr, ml, mm, mr, bl, bm, br], dtype=np.float32)
         return InferenceEngine._rule_based_predict(features)
 
     def test_balanced_is_correct(self):

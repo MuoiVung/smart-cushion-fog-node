@@ -44,7 +44,7 @@ class DashboardPanel(ctk.CTkFrame):
         self.fr_bar = self._create_feature_bar(features_frame, "Front Right", 1, 2)
         
         self.ml_bar = self._create_feature_bar(features_frame, "Mid Left", 2, 0)
-        self.mc_bar = self._create_feature_bar(features_frame, "Center", 2, 1)
+        self.mm_bar = self._create_feature_bar(features_frame, "Mid Mid", 2, 1)
         self.mr_bar = self._create_feature_bar(features_frame, "Mid Right", 2, 2)
 
         self.bl_bar = self._create_feature_bar(features_frame, "Back Left", 3, 0)
@@ -74,7 +74,7 @@ class DashboardPanel(ctk.CTkFrame):
                 self._update_bar(self.fm_bar, "Front Mid", 0.0)
                 self._update_bar(self.fr_bar, "Front Right", 0.0)
                 self._update_bar(self.ml_bar, "Mid Left", 0.0)
-                self._update_bar(self.mc_bar, "Center", 0.0)
+                self._update_bar(self.mm_bar, "Mid Mid", 0.0)
                 self._update_bar(self.mr_bar, "Mid Right", 0.0)
                 self._update_bar(self.bl_bar, "Back Left", 0.0)
                 self._update_bar(self.bm_bar, "Back Mid", 0.0)
@@ -101,7 +101,7 @@ class DashboardPanel(ctk.CTkFrame):
                 self._update_bar(self.fm_bar, "Front Mid", features[1])
                 self._update_bar(self.fr_bar, "Front Right", features[2])
                 self._update_bar(self.ml_bar, "Mid Left", features[3])
-                self._update_bar(self.mc_bar, "Center", features[4])
+                self._update_bar(self.mm_bar, "Mid Mid", features[4])
                 self._update_bar(self.mr_bar, "Mid Right", features[5])
                 self._update_bar(self.bl_bar, "Back Left", features[6])
                 self._update_bar(self.bm_bar, "Back Mid", features[7])

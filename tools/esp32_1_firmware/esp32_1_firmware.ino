@@ -13,7 +13,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include "../esp32_secrets.h"
+#include "esp32_secrets.h"
 
 // ==========================================
 // --- HARWARE PINS ---

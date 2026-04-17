@@ -236,6 +236,7 @@ class FogApplication:
             sensors=sensors,
             features=processed_features,
             alert_sent=alert_sent,
+            trigger_device_id=raw_msg.device_id,
         )
         await self._ws_server.broadcast(broadcast.model_dump())
 
