@@ -482,24 +482,26 @@
         <div class="sensor-bar-wrap"><div class="sensor-bar" id="barTemp" style="width:0%"></div></div>
         <div class="sensor-val" id="valTemp">—</div>
       </div>
+      </div>
+    </div>
 
-      <!-- Event Log -->
-      <div class="card-title" style="margin-top:0.5rem">Raw Data & Event Logs (ESP32 ⇄ Fog)</div>
-      <div style="display: flex; gap: 8px;">
-        <div style="flex:1; display:flex; flex-direction:column; min-width: 0;">
-          <div style="font-size: 0.72rem; color: var(--muted); margin-bottom:4px; font-weight:bold;">ESP32-1 (Device ID: esp32-1)</div>
-          <div class="log-container" id="logContainer1">
+    <!-- Log Card (spans full width) -->
+    <div class="card" style="grid-column: 1 / -1;">
+      <div class="card-title">Raw Data & Event Logs (ESP32 ⇄ Fog)</div>
+      <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+        <div style="flex:1; display:flex; flex-direction:column; min-width: 300px;">
+          <div style="font-size: 0.72rem; color: var(--muted); margin-bottom:6px; font-weight:bold;">ESP32-1 (Device ID: esp32-1)</div>
+          <div class="log-container" id="logContainer1" style="height:250px;">
             <div class="log-entry log-info"><span class="log-time">—</span>Waiting for esp32-1 connection…</div>
           </div>
         </div>
-        <div style="flex:1; display:flex; flex-direction:column; min-width: 0;">
-          <div style="font-size: 0.72rem; color: var(--muted); margin-bottom:4px; font-weight:bold;">ESP32-2 (Device ID: esp32-2)</div>
-          <div class="log-container" id="logContainer2">
+        <div style="flex:1; display:flex; flex-direction:column; min-width: 300px;">
+          <div style="font-size: 0.72rem; color: var(--muted); margin-bottom:6px; font-weight:bold;">ESP32-2 (Device ID: esp32-2)</div>
+          <div class="log-container" id="logContainer2" style="height:250px;">
             <div class="log-entry log-info"><span class="log-time">—</span>Waiting for esp32-2 connection…</div>
           </div>
         </div>
       </div>
-    </div>
 
   </div>
   <!-- /dashboard -->
