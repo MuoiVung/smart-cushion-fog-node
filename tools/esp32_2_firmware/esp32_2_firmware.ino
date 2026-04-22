@@ -93,8 +93,8 @@ void loop() {
 
   unsigned long now = millis();
   
-  // Publish to MQTT every 1 second
-  if (now - lastMsg > 1000) {
+  // Publish to MQTT every 500ms for smoother real-time data
+  if (now - lastMsg > 500) {
     lastMsg = now;
 
     // Read real FSR pins from inner cross
