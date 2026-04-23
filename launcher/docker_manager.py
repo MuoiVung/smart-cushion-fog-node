@@ -16,6 +16,8 @@ import sys
 import threading
 import time
 from enum import Enum
+import os
+import requests
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -63,6 +65,7 @@ class DockerManager:
         on_log:    Optional[LogCallback]    = None,
     ) -> None:
         self._root      = project_root
+        self._compose_dir = project_root
         self._on_status = on_status
         self._on_log    = on_log
 
@@ -70,15 +73,15 @@ class DockerManager:
         self._poll_thread: Optional[threading.Thread] = None
 
         self._native_mode = not self.is_docker_available()
+        self._ngrok_process: Optional[subprocess.Popen] = None
+        self._ngrok_url: Optional[str] = None
         self._native_process: Optional[subprocess.Popen] = None
 
     # ── Public API ─────────────────────────────────────────────────────────
 
-    def start(self) -> None:
-        """Start Docker Compose services (non-blocking)."""
-        self._log("Starting Docker services…")
-        thread = threading.Thread(target=self._do_start, daemon=True)
-        thread.start()
+    def start(self, authtoken: Optional[str] = None) -> None:
+        """Start services in a background thread."""
+        threading.Thread(target=self._do_start, args=(authtoken,), daemon=True).start()
 
     def stop(self) -> None:
         """Stop Docker Compose services (non-blocking)."""
@@ -112,9 +115,15 @@ class DockerManager:
 
     # ── Private: subprocess operations ────────────────────────────────────
 
-    def _do_start(self) -> None:
-        """Run `docker compose up` or native `python app.py` and start polling."""
+    def _do_start(self, authtoken: Optional[str] = None) -> None:
+        """Run `docker compose up` or start native app."""
         try:
+            self._log("🚀 Starting services...")
+            
+            # Start Ngrok if token provided
+            if authtoken:
+                self._start_ngrok(authtoken)
+
             if self._native_mode:
                 self._log("Native mode: Starting python app.py...")
                 self._native_process = subprocess.Popen(
@@ -162,6 +171,7 @@ class DockerManager:
                 self._run_compose(["down"], stream_log=True)
                 self._log("🛑 Docker services stopped")
 
+            self._stop_ngrok()
             if self._on_status:
                 status = ServiceStatus()
                 status.mosquitto = ServiceState.STOPPED
@@ -178,7 +188,8 @@ class DockerManager:
                 self._do_start()
             else:
                 self._run_compose(["restart", "fog-node"], stream_log=True)
-                self._log("🔄 fog-node restarted")
+                self._log("✅ Services stopped")
+            self._stop_ngrok()
         except Exception as exc:
             self._log(f"❌ Failed to restart fog-node: {exc}")
 
@@ -196,22 +207,72 @@ class DockerManager:
     def _run_compose(self, args: list[str], stream_log: bool = False) -> None:
         """Execute a docker compose sub-command, optionally streaming output to log."""
         cmd = ["docker", "compose"] + args
-        self._log(f"$ {' '.join(cmd)}")
+        self._log(f"🛠️  Running: {' '.join(cmd)}")
+        
         process = subprocess.Popen(
             cmd,
-            cwd=str(self._root),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            bufsize=1,
+            cwd=self._compose_dir
         )
-        if stream_log and process.stdout:
+
+        if stream_log:
             for line in process.stdout:
-                stripped = line.rstrip()
-                if stripped:
-                    self._log(stripped)
+                self._log(f"  {line.strip()}")
+        
         process.wait()
-        if process.returncode not in (0, None):
-            raise RuntimeError(f"docker compose exited with code {process.returncode}")
+        if process.returncode != 0:
+            raise Exception(f"Command failed with exit code {process.returncode}")
+
+    # ── Ngrok Management ───────────────────────────────────────────────────
+
+    def _start_ngrok(self, authtoken: str) -> None:
+        """Start ngrok tunnel for port 8765."""
+        try:
+            # 1. Configure authtoken
+            self._log("🔑 Configuring ngrok authtoken...")
+            subprocess.run(["ngrok", "config", "add-authtoken", authtoken], check=True, capture_output=True)
+            
+            # 2. Start ngrok process
+            self._log("🌐 Opening ngrok tunnel (port 8765)...")
+            self._ngrok_process = subprocess.Popen(
+                ["ngrok", "http", "8765", "--log=stdout"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True
+            )
+            
+            # 3. Wait a bit for it to initialize
+            time.sleep(2)
+            self._log("✅ Ngrok process started")
+            
+        except Exception as e:
+            self._log(f"❌ Failed to start ngrok: {e}")
+
+    def _stop_ngrok(self) -> None:
+        """Kill the ngrok process."""
+        if self._ngrok_process:
+            self._log("🛑 Stopping ngrok...")
+            self._ngrok_process.terminate()
+            self._ngrok_process = None
+            self._ngrok_url = None
+
+    def get_ngrok_url(self) -> Optional[str]:
+        """Fetch the public URL from ngrok's local API."""
+        try:
+            res = requests.get("http://localhost:4040/api/tunnels", timeout=2)
+            data = res.json()
+            # Find the https/wss tunnel
+            for tunnel in data.get('tunnels', []):
+                if tunnel.get('proto') == 'https':
+                    public_url = tunnel.get('public_url')
+                    # Convert https:// to wss://
+                    return public_url.replace("https://", "wss://")
+        except:
+            pass
+        return None
 
     # ── Private: status polling ────────────────────────────────────────────
 

@@ -148,6 +148,7 @@ class FogLauncherApp(ctk.CTk):
         self.device_id    = _read_env("DEVICE_ID", "cushion-01")
 
         self._current_status: Optional[ServiceStatus] = None
+        self._discovery_timer: Optional[str]          = None
         self._monitor_paused = False
         self._active_channel = CHANNELS[0]["key"]
         self._monitors_started = False   # Guard: start monitors only once per Start
@@ -529,7 +530,10 @@ class FogLauncherApp(ctk.CTk):
         self._start_btn.configure(state="disabled", text="Starting…")
         self._stop_btn.configure(state="normal")
         self._monitors_started = False   # Reset so monitors re-attach on next Start
-        self._docker.start()
+        
+        # Read ngrok token from .env
+        ngrok_token = _read_env("NGROK_AUTHTOKEN", "").strip()
+        self._docker.start(authtoken=ngrok_token if ngrok_token else None)
 
     def _on_rebuild(self) -> None:
         if messagebox.askyesno("Confirm Rebuild", "Rebuilding will update libraries and core code. It may take 1-2 minutes. Continue?"):
@@ -647,6 +651,8 @@ class FogLauncherApp(ctk.CTk):
         ):
             if not self._monitors_started:
                 self.after(0, self._start_monitors)
+                # Also trigger immediate discovery report so Ngrok IP is sent ASAP
+                self.after(1000, self.report_discovery_ip) 
         else:
             if self._monitors_started:
                 self.after(0, self._stop_monitors)
@@ -763,35 +769,50 @@ class FogLauncherApp(ctk.CTk):
         pnl.configure(state="disabled")
 
     def report_discovery_ip(self):
-        """Finds Host LAN IP and reports it to Firebase."""
+        """Reports connection info to Firebase (Ngrok URL or Local IP)."""
         try:
-            # 1. Get Host LAN IP
+            # 1. Try to get Ngrok URL first
+            ngrok_url = self._docker.get_ngrok_url()
+            
+            # 2. Get Host LAN IP (as fallback)
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 1))
             local_ip = s.getsockname()[0]
             s.close()
             
-            # 2. Get Public IP
+            # 3. Get Public IP
             public_ip = None
             try:
                 public_ip = requests.get("https://api.ipify.org", timeout=5).text
             except:
                 pass
                 
-            # 3. Send to Firebase
+            # 4. Determine final "local_ip" field to send
+            # We overwrite local_ip with ngrok_url if available so Web App picks it up
+            display_ip = ngrok_url if ngrok_url else local_ip
+
+            # 5. Send to Firebase
             url = f"{self.firebase_url.rstrip('/')}/devices/{self.device_id}.json"
             payload = {
-                "local_ip": local_ip,
+                "local_ip": display_ip,
                 "public_ip": public_ip,
+                "is_ngrok": bool(ngrok_url),
                 "timestamp": int(time.time() * 1000)
             }
             requests.put(url, json=payload, timeout=5)
-            self._log_queue.put(f"Discovery: Reported Host IP {local_ip} to Firebase.")
+            
+            if ngrok_url:
+                self._log_queue.put(f"Discovery: Reported Ngrok URL {ngrok_url} to Firebase.")
+            else:
+                self._log_queue.put(f"Discovery: Reported LAN IP {local_ip} to Firebase.")
+                
         except Exception as e:
             self._log_queue.put(f"Discovery Error: {e}")
             
-        # Repeat every 5 minutes
-        self.after(300000, self.report_discovery_ip)
+        # Repeat every 5 minutes (cancel old timer if exists to avoid duplicates)
+        if self._discovery_timer:
+            self.after_cancel(self._discovery_timer)
+        self._discovery_timer = self.after(300000, self.report_discovery_ip)
 
     def _on_close(self) -> None:
         """Clean up on window close."""
