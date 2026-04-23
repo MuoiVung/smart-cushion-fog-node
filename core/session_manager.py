@@ -17,10 +17,14 @@ from dataclasses import dataclass, field
 from typing import Deque, Optional, Tuple
 
 from data.schema import (
-    CloudSyncPayload,
-    PostureCounts,
+    CloudSummaryRecord,
+    PostureDurationBreakdown,
     PostureLabel,
+    SITTING_POSTURES,
+    GOOD_POSTURES,
 )
+# Backwards-compatible alias
+CloudSyncPayload = CloudSummaryRecord
 
 logger = logging.getLogger(__name__)
 

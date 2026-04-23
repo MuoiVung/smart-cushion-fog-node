@@ -4,21 +4,41 @@ Tài liệu đặc tả toàn bộ luồng dữ liệu (Data Interfaces) và dan
 
 ---
 
-## 1. Danh mục Phân loại Tư thế (Posture Classification)
+## 1. Danh mục Phân loại Nhãn AI (AI Label Classification)
 
-Hệ thống nhận diện 9 tư thế ngồi dựa trên dữ liệu từ 9 cảm biến áp lực FSR.
+Mô hình AI nhận diện **11 nhãn** từ dữ liệu 9 cảm biến FSR (3×3 matrix). Nhiệt độ **không** được dùng để nhận diện có người ngồi — AI xử lý toàn bộ qua áp lực. Nhiệt độ chỉ được báo cáo lên App.
+
+### 1.1. Nhãn trạng thái bề mặt đệm (2 nhãn)
+
+| STT | Nhãn | Tên | Đặc điểm |
+| :--- | :--- | :--- | :--- |
+| 0 | **empty** | Empty Cushion | Không có người hoặc vật nào đặt lên đệm. Áp lực toàn bộ rất thấp. |
+| 1 | **object** | Object Detected | Có vật thể đặt lên đệm nhưng **không phải người ngồi** (ví dụ: túi xách, laptop). Áp lực bất thường, không phân bổ như người ngồi. |
+
+### 1.2. Nhãn tư thế ngồi (9 nhãn)
+
+Được kích hoạt khi AI xác định có người đang ngồi trên đệm.
 
 | STT | Nhãn | Tên tư thế | Đặc điểm chính |
 | :--- | :--- | :--- | :--- |
-| 1 | **NUP** | Natural Upright Posture | Cột sống thẳng tự nhiên, trọng lượng cân bằng. |
-| 2 | **LF** | Lean Forward | Thân người đổ về phía trước. |
-| 3 | **LB** | Lean Backward | Thân người ngả ra phía sau. |
-| 4 | **LFSR** | Lean Forward-Support Right | Đổ người, tựa đầu hoặc khuỷu tay vào tay phải trên bàn. |
-| 5 | **LFSL** | Lean Forward-Support Left | Đổ người, tựa khuỷu tay trái trên bàn. |
-| 6 | **CRL** | Cross-Right Legged | Vắt chéo chân (Cổ chân phải đặt trên gối trái). |
-| 7 | **CLL** | Cross-Left Legged | Vắt chéo chân (Cổ chân trái đặt trên gối phải). |
-| 8 | **CRLL** | Cross-Right Legged-Legged | Vắt chéo chân sâu (Đùi phải vắt qua đùi trái). |
-| 9 | **CLLL** | Cross-Left Legged-Legged | Vắt chéo chân sâu (Đùi trái vắt qua đùi phải). |
+| 2 | **NUP** | Natural Upright Posture | Cột sống thẳng tự nhiên, trọng lượng cân bằng. |
+| 3 | **LF** | Lean Forward | Thân người đổ về phía trước. |
+| 4 | **LB** | Lean Backward | Thân người ngả ra phía sau. |
+| 5 | **LFSR** | Lean Forward-Support Right | Đổ người, tựa đầu hoặc khuỷu tay vào tay phải trên bàn. |
+| 6 | **LFSL** | Lean Forward-Support Left | Đổ người, tựa khuỷu tay trái trên bàn. |
+| 7 | **CRL** | Cross-Right Legged | Vắt chéo chân (Cổ chân phải đặt trên gối trái). |
+| 8 | **CLL** | Cross-Left Legged | Vắt chéo chân (Cổ chân trái đặt trên gối phải). |
+| 9 | **CRLL** | Cross-Right Legged-Legged | Vắt chéo chân sâu (Đùi phải vắt qua đùi trái). |
+| 10 | **CLLL** | Cross-Left Legged-Legged | Vắt chéo chân sâu (Đùi trái vắt qua đùi phải). |
+
+### 1.3. Quy tắc nghiệp vụ từ nhãn AI
+
+| Nhãn AI | occupancy_state | Cảnh báo rung |
+| :--- | :--- | :--- |
+| `empty` | `empty` | Không |
+| `object` | `uncertain` | Không |
+| `NUP` | `occupied` | Không (tư thế đúng) |
+| `LF`, `LB`, `LFSR`, `LFSL`, `CRL`, `CLL`, `CRLL`, `CLLL` | `occupied` | Có (sau N lần liên tiếp) |
 
 ---
 

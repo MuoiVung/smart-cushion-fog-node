@@ -1,22 +1,19 @@
 """
 Smart Cushion Fog Node – Main Application Entry Point.
 
-This module wires all components together and runs the main asyncio event loop.
-
-Data pipeline (per sensor reading):
-  ESP32 (MQTT cushion/raw)
-    └─► MQTTClient._on_message()      [paho thread]
-          └─► asyncio.Queue           [thread-safe bridge]
-                └─► _message_processor()    [asyncio task]
-                      ├─► Preprocessor.is_person_present()
-                      ├─► Preprocessor.extract_features()
-                      ├─► InferenceEngine.predict()
-                      ├─► SessionManager.add_reading()   → alert decision
-                      ├─► MQTTClient.publish_control()   [if alert – Interface 05]
+Data pipeline (per sensor reading from ESP32 via MQTT cushion/raw):
+  RawMessage (JSON)
+    └─► Merge into AggregatedSensorReading
+          └─► InferenceEngine.predict(raw_9_values)   [11-label Keras CNN]
+                └─► PostureLabel (empty / object / NUP / LF / LB / ...)
+                      ├─► OccupancyState derived from label
+                      ├─► SessionManager.add_reading()  → alert decision
+                      ├─► MQTTClient.publish_control()   [Interface 05, if alert]
                       └─► WebSocketServer.broadcast()    [Interface 02]
 
-Periodic cloud sync task (every CLOUD_SYNC_INTERVAL seconds):
-  SessionManager.get_sync_payload() → CloudSync.publish()  [Interface 03]
+Periodic cloud sync:
+  Every CLOUD_SYNC_INTERVAL seconds:
+    SessionManager.get_sync_payload() → CloudSync.publish() [Interface 03]
 """
 
 import asyncio
@@ -42,6 +39,8 @@ from data.schema import (
     PostureLabel,
     RawMessage,
     GOOD_POSTURES,
+    SITTING_POSTURES,
+    occupancy_from_label,
 )
 from utils.logger import setup_logging
 
@@ -49,17 +48,9 @@ logger = logging.getLogger(__name__)
 
 
 class FogApplication:
-    """
-    Top-level orchestrator of the Smart Cushion Fog Node.
-
-    Responsibilities:
-    - Initialise all components with configuration from settings.
-    - Run the MQTT, WebSocket, and cloud sync concurrently.
-    - Handle graceful shutdown on SIGTERM / SIGINT (Ctrl+C).
-    """
+    """Top-level orchestrator of the Smart Cushion Fog Node."""
 
     def __init__(self) -> None:
-        # asyncio queue bridges paho's callback thread to our async pipeline
         self._message_queue: asyncio.Queue[bytes] = asyncio.Queue()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._running = False
@@ -68,28 +59,29 @@ class FogApplication:
         self._current_sensors = AggregatedSensorReading()
 
         # Session-level counters
-        self._session_id: str = ""
-        self._session_start: datetime | None = None
-        self._alert_count: int = 0
-        self._alert_status: AlertStatus = AlertStatus.IDLE
-        self._alert_active: bool = False   # physical motor state
+        self._session_id:       str              = ""
+        self._session_start:    datetime | None  = None
+        self._alert_count:      int              = 0
+        self._alert_status:     AlertStatus      = AlertStatus.IDLE
+        self._alert_active:     bool             = False
+        self._consecutive_bad:  int              = 0   # consecutive bad posture readings
 
-        # ── Component initialisation ────────────────────────────────────────
-        self._ws_server      = WebSocketServer(settings)
-        self._cloud_sync     = CloudSync(settings)
+        # ── Components ──────────────────────────────────────────────────────
+        self._ws_server       = WebSocketServer(settings)
+        self._cloud_sync      = CloudSync(settings)
         self._session_manager = SessionManager(
             window_seconds=settings.cloud_sync_interval,
             incorrect_alert_threshold=settings.incorrect_posture_alert_threshold,
         )
-        self._preprocessor = Preprocessor(
-            temperature_threshold=settings.temperature_threshold,
+        self._preprocessor = Preprocessor()   # no parameters needed anymore
+        self._inference = InferenceEngine(
+            model_path  = settings.model_path,
+            scaler_path = settings.scaler_path,
         )
-        self._inference = InferenceEngine(model_path=settings.model_path)
 
     # ── Application lifecycle ──────────────────────────────────────────────
 
     async def run(self) -> None:
-        """Start all subsystems and run until a shutdown signal is received."""
         setup_logging()
         self._print_banner()
         self._running = True
@@ -107,7 +99,6 @@ class FogApplication:
                 pass
 
         mqtt_client.start()
-
         if settings.cloud_enabled:
             await self._cloud_sync.connect()
 
@@ -129,7 +120,6 @@ class FogApplication:
     # ── Async tasks ────────────────────────────────────────────────────────
 
     async def _message_processor(self) -> None:
-        """Consume raw MQTT payloads from the queue and run the full AI pipeline."""
         logger.info("Message processor started")
         while self._running:
             try:
@@ -146,9 +136,8 @@ class FogApplication:
                 self._message_queue.task_done()
 
     async def _cloud_sync_loop(self) -> None:
-        """Periodically publish session summary to AWS IoT Core."""
         if not settings.cloud_enabled:
-            logger.info("Cloud sync disabled (CLOUD_ENABLED=false). Task is idle.")
+            logger.info("Cloud sync disabled. Task idle.")
             await asyncio.Event().wait()
             return
         logger.info(f"Cloud sync loop started (interval={settings.cloud_sync_interval}s)")
@@ -160,7 +149,6 @@ class FogApplication:
             await self._cloud_sync.publish(sync_payload)
 
     async def _shutdown_watcher(self) -> None:
-        """Wait for _running to become False, then cancel all peer tasks."""
         while self._running:
             await asyncio.sleep(0.5)
         for task in asyncio.all_tasks():
@@ -171,16 +159,17 @@ class FogApplication:
 
     async def _process_sensor_data(self, raw_bytes: bytes) -> None:
         """
-        Full AI pipeline for a single sensor reading.
+        Full pipeline for one MQTT message from an ESP32.
 
         Steps:
-          1. Parse and validate JSON from ESP32.
-          2. Merge partial readings into aggregated sensor state.
-          3. Detect human presence from temperature threshold.
-          4. Extract features + run AI inference (if person present).
-          5. Evaluate alert threshold via SessionManager.
-          6. Send vibration command to ESP32-1 if threshold exceeded (Interface 05).
-          7. Build Interface 02 payload and broadcast via WebSocket.
+          1. Parse JSON → RawMessage
+          2. Merge partial readings → AggregatedSensorReading
+          3. Extract raw FSR array (9 values, 0–4095)
+          4. Run InferenceEngine → 11-label PostureLabel + confidence
+          5. Derive OccupancyState from label
+          6. Update session tracking (start/end, alert counter)
+          7. Send vibration command to ESP32-1 if alert threshold reached (Interface 05)
+          8. Broadcast FogRealtimeUpdate via WebSocket (Interface 02)
         """
         # Step 1 – Parse
         try:
@@ -190,69 +179,45 @@ class FogApplication:
             logger.warning(f"Invalid sensor message, skipping: {exc}")
             return
 
-        # Step 2 – Merge partial readings (each ESP32 only sends its own sensors)
+        # Step 2 – Merge partial readings
         updated = {k: v for k, v in raw_msg.sensors.model_dump().items() if v is not None}
         for k, v in updated.items():
             setattr(self._current_sensors, k, v)
 
         sensors = self._current_sensors
 
-        # Step 3 – Occupancy / presence detection
-        person_detected = self._preprocessor.is_person_present(sensors)
+        # Step 3 – Extract raw FSR array
+        raw_fsr = self._preprocessor.extract_raw(sensors)
 
-        if not person_detected:
-            posture    = PostureLabel.UNKNOWN
-            occupancy  = OccupancyState.EMPTY
-            confidence = 1.0
-        else:
-            occupancy = OccupancyState.OCCUPIED
+        # Step 4 – AI inference (11 labels)
+        posture, confidence = self._inference.predict(raw_fsr)
 
-            # Step 4 – Feature extraction + AI inference
-            features           = self._preprocessor.extract_features(sensors)
-            posture, confidence = self._inference.predict(features)
+        # Step 5 – Derive occupancy from label (no temperature logic)
+        occupancy = occupancy_from_label(posture)
 
-        # Step 5 – Session tracking + alert evaluation
-        should_alert = self._session_manager.add_reading(
-            posture=posture,
-            person_detected=person_detected,
-            timestamp=raw_msg.timestamp,
-        )
+        # Step 6 – Session tracking
+        person_is_sitting = posture in SITTING_POSTURES
 
-        # Step 6 – Vibration command (Interface 05)
-        if should_alert:
-            cmd = ControlCommand(
-                device_id="esp32-1",
-                command="vibrate",
-                active=True,
-                pattern="short_triple",
-                intensity=settings.vibration_intensity if hasattr(settings, "vibration_intensity") else 200,
-            )
-            _get_mqtt_client().publish_control(cmd)
-            self._alert_active = True
-            self._alert_count += 1
-            self._alert_status = AlertStatus.WARNING
-            logger.info(f"[ALERT] Vibration sent – posture: {posture.value}")
-        else:
-            # Motor is physically off between alerts
-            if self._alert_active and posture in GOOD_POSTURES:
-                self._alert_active = False
-                self._alert_status = AlertStatus.COOLDOWN
-            elif posture in GOOD_POSTURES:
-                self._alert_status = AlertStatus.IDLE
+        if person_is_sitting and self._session_start is None:
+            # Session started
+            self._session_start   = datetime.now(timezone.utc)
+            self._session_id      = FogRealtimeUpdate().session_id
+            self._alert_count     = 0
+            self._consecutive_bad = 0
+            self._alert_status    = AlertStatus.IDLE
+            self._alert_active    = False
+            logger.info(f"Session started: {self._session_id}")
 
-        # Manage session start
-        if person_detected and self._session_start is None:
-            self._session_start = datetime.now(timezone.utc)
-            self._session_id    = FogRealtimeUpdate().session_id   # auto-generate
+        if not person_is_sitting and self._session_start is not None:
+            # Session ended
+            logger.info(f"Session ended: {self._session_id}")
+            self._session_start   = None
+            self._session_id      = ""
+            self._alert_count     = 0
+            self._consecutive_bad = 0
+            self._alert_status    = AlertStatus.IDLE
+            self._alert_active    = False
 
-        if not person_detected and self._session_start is not None:
-            self._session_start = None
-            self._session_id    = ""
-            self._alert_count   = 0
-            self._alert_status  = AlertStatus.IDLE
-            self._alert_active  = False
-
-        # Compute session duration
         session_duration_sec = 0
         session_start_iso    = ""
         if self._session_start:
@@ -261,14 +226,45 @@ class FogApplication:
             )
             session_start_iso = self._session_start.isoformat()
 
-        # Step 7 – Broadcast Interface 02 payload
+        # Step 7 – Alert logic (only for sitting, bad posture)
+        should_alert = False
+        if person_is_sitting and posture not in GOOD_POSTURES:
+            self._consecutive_bad += 1
+            logger.debug(f"Consecutive bad posture: {self._consecutive_bad}/{settings.incorrect_posture_alert_threshold}")
+            if self._consecutive_bad >= settings.incorrect_posture_alert_threshold:
+                should_alert = True
+                self._consecutive_bad = 0
+        elif person_is_sitting and posture in GOOD_POSTURES:
+            self._consecutive_bad = 0
+            if self._alert_status == AlertStatus.WARNING:
+                self._alert_status = AlertStatus.COOLDOWN
+            elif self._alert_status == AlertStatus.COOLDOWN:
+                self._alert_status = AlertStatus.IDLE
+
+        if should_alert:
+            cmd = ControlCommand(
+                device_id="esp32-1",
+                command="vibrate",
+                active=True,
+                pattern="short_triple",
+                intensity=settings.vibration_intensity,
+            )
+            _get_mqtt_client().publish_control(cmd)
+            self._alert_active = True
+            self._alert_count  += 1
+            self._alert_status  = AlertStatus.WARNING
+            logger.info(f"[ALERT] Vibration sent – posture: {posture.value}")
+        elif person_is_sitting and posture in GOOD_POSTURES:
+            self._alert_active = False
+
+        # Step 8 – Broadcast Interface 02 via WebSocket
         broadcast = FogRealtimeUpdate(
             device_id=settings.device_id,
             session_id=self._session_id,
             session_start_time_iso=session_start_iso,
             occupancy_state=occupancy,
             posture=posture,
-            temperature=round(sensors.temperature, 1),
+            temperature=self._preprocessor.get_temperature(sensors),
             alert_active=self._alert_active,
             alert_status=self._alert_status,
             alert_count=self._alert_count,
@@ -278,9 +274,8 @@ class FogApplication:
         await self._ws_server.broadcast(broadcast.model_dump())
 
         logger.debug(
-            f"Pipeline done – posture={posture.value}, "
-            f"occupancy={occupancy.value}, alert={self._alert_active}, "
-            f"ws_clients={self._ws_server.connected_count}"
+            f"Pipeline done – posture={posture.value}, occupancy={occupancy.value}, "
+            f"alert={self._alert_active}, ws_clients={self._ws_server.connected_count}"
         )
 
     # ── Shutdown ───────────────────────────────────────────────────────────
@@ -293,12 +288,13 @@ class FogApplication:
 
     @staticmethod
     def _print_banner() -> None:
-        border = "=" * 56
+        border = "=" * 58
         logger.info(border)
         logger.info("  Smart Cushion Fog Node")
         logger.info(f"  MQTT Broker  : {settings.mqtt_host}:{settings.mqtt_port}")
         logger.info(f"  WebSocket    : ws://{settings.ws_host}:{settings.ws_port}")
         logger.info(f"  AI Model     : {settings.model_path}")
+        logger.info(f"  Scaler       : {settings.scaler_path}")
         logger.info(f"  Cloud Sync   : {'ENABLED' if settings.cloud_enabled else 'disabled'}")
         logger.info(border)
 

@@ -29,8 +29,22 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 class PostureLabel(str, Enum):
-    """9 posture states the AI engine can detect (system_architecture.md §1)."""
-    NUP  = "NUP"   # Natural Upright Posture  – correct
+    """
+    11 AI output labels (system_architecture.md §1).
+
+    Surface state (2 labels):
+      empty   – no person or object on the cushion
+      object  – something placed on cushion, but NOT a seated person
+
+    Posture labels (9 labels, person is seated):
+      NUP, LF, LB, LFSR, LFSL, CRL, CLL, CRLL, CLLL
+    """
+    # Surface state labels
+    EMPTY  = "empty"   # Nothing on cushion
+    OBJECT = "object"  # Object detected, not a person
+
+    # Posture labels (person is seated)
+    NUP  = "NUP"   # Natural Upright Posture – correct posture
     LF   = "LF"    # Lean Forward
     LB   = "LB"    # Lean Backward
     LFSR = "LFSR"  # Lean Forward-Support Right
@@ -39,10 +53,25 @@ class PostureLabel(str, Enum):
     CLL  = "CLL"   # Cross-Left Legged
     CRLL = "CRLL"  # Cross-Right Legged-Legged
     CLLL = "CLLL"  # Cross-Left Legged-Legged
-    UNKNOWN = "unknown"  # No person detected
 
 
+# Only NUP is a correct seated posture (no vibration alert)
 GOOD_POSTURES: frozenset[PostureLabel] = frozenset({PostureLabel.NUP})
+
+# Labels that indicate a human is actually seated (for session tracking)
+SITTING_POSTURES: frozenset[PostureLabel] = frozenset({
+    PostureLabel.NUP,  PostureLabel.LF,   PostureLabel.LB,
+    PostureLabel.LFSR, PostureLabel.LFSL, PostureLabel.CRL,
+    PostureLabel.CLL,  PostureLabel.CRLL, PostureLabel.CLLL,
+})
+
+# Map each AI label → OccupancyState (defined below, forward ref)
+def occupancy_from_label(label: "PostureLabel") -> "OccupancyState":
+    if label == PostureLabel.EMPTY:
+        return OccupancyState.EMPTY
+    if label == PostureLabel.OBJECT:
+        return OccupancyState.UNCERTAIN
+    return OccupancyState.OCCUPIED
 
 
 class OccupancyState(str, Enum):

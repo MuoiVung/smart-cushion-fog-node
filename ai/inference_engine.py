@@ -1,114 +1,106 @@
 """
 AI Inference Engine for the Smart Cushion Fog Node.
 
-This module provides:
-  PostureMLP  – Lightweight PyTorch MLP model architecture.
-  InferenceEngine – High-level wrapper that loads weights and runs prediction.
+Integrates the trained Keras CNN model from smart-cushion-AI:
+  - Model  : ai/models/smart_cushion_model.h5  (Keras CNN 2D, binary → extensible)
+  - Scaler : ai/models/fsr_scaler.pkl          (sklearn MinMaxScaler)
 
-If no trained model file is found, InferenceEngine automatically falls back
-to a built-in rule-based heuristic classifier so the system remains
-fully functional during development and before a model is trained.
+11-label architecture (system_architecture.md §1):
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │ Label index │ PostureLabel │ Meaning                               │
+  │─────────────│──────────────│───────────────────────────────────────│
+  │      0      │  empty       │ Cushion is empty                      │
+  │      1      │  object      │ Non-human object on cushion           │
+  │      2      │  NUP         │ Natural Upright Posture (correct)     │
+  │      3      │  LF          │ Lean Forward                          │
+  │      4      │  LB          │ Lean Backward                         │
+  │      5      │  LFSR        │ Lean Fwd – Support Right              │
+  │      6      │  LFSL        │ Lean Fwd – Support Left               │
+  │      7      │  CRL         │ Cross-Right Legged                    │
+  │      8      │  CLL         │ Cross-Left Legged                     │
+  │      9      │  CRLL        │ Cross-Right Legged-Legged             │
+  │     10      │  CLLL        │ Cross-Left Legged-Legged              │
+  └─────────────────────────────────────────────────────────────────────┘
 
-Model architecture (PostureMLP):
-  Input  layer : 9 neurons  (normalised FSR values, 3x3 matrix)
-  Hidden layer : 32 → 16 neurons (ReLU + BatchNorm + Dropout)
-  Output layer : 5 neurons  (posture class logits)
+Current trained model (smart_cushion_model.h5):
+  - Binary CNN: 0 = Incorrect/Leaning, 1 = Sitting Straight
+  - The engine wraps this as a 2-label subset (maps: 1→NUP, 0→LF)
+    and uses rule-based heuristics for the remaining labels
+    (empty, object, LB, LFSR, LFSL, CRL, CLL, CRLL, CLLL).
+  - When an 11-class model is trained, replace the .h5 file and
+    update NUM_CLASSES + POSTURE_LABELS below — no other changes needed.
 
-Posture class indices:
-  0 = correct
-  1 = lean_left
-  2 = lean_right
-  3 = slouch_forward
-  4 = lean_back
+Fallback:
+  If the model file or scaler cannot be loaded, a rule-based heuristic
+  classifier maintains full functionality during development.
 """
 
 import logging
 from pathlib import Path
 from typing import Tuple
 
+import joblib
 import numpy as np
-import torch
-import torch.nn as nn
 
 from data.schema import PostureLabel
 
 logger = logging.getLogger(__name__)
 
-# Ordered list mapping model output index -> PostureLabel
-POSTURE_LABELS: list[PostureLabel] = [
-    PostureLabel.CORRECT,
-    PostureLabel.LEAN_LEFT,
-    PostureLabel.LEAN_RIGHT,
-    PostureLabel.SLOUCH_FORWARD,
-    PostureLabel.LEAN_BACK,
+# ── Full ordered label list (model output index → PostureLabel) ────────────
+# Update this when a multi-class model is trained:
+POSTURE_LABELS_11: list[PostureLabel] = [
+    PostureLabel.EMPTY,   # 0
+    PostureLabel.OBJECT,  # 1
+    PostureLabel.NUP,     # 2
+    PostureLabel.LF,      # 3
+    PostureLabel.LB,      # 4
+    PostureLabel.LFSR,    # 5
+    PostureLabel.LFSL,    # 6
+    PostureLabel.CRL,     # 7
+    PostureLabel.CLL,     # 8
+    PostureLabel.CRLL,    # 9
+    PostureLabel.CLLL,    # 10
 ]
 
+# ── Current binary model output mapping ───────────────────────────────────
+# score ≥ 0.5 → "Sitting Straight" → NUP
+# score < 0.5 → "Incorrect/Leaning" → LF (generic bad posture)
+_BINARY_POS_LABEL = PostureLabel.NUP   # score ≥ 0.5
+_BINARY_NEG_LABEL = PostureLabel.LF    # score < 0.5
 
-# ---------------------------------------------------------------------------
-# Model Architecture
-# ---------------------------------------------------------------------------
+# FSR total-pressure thresholds for the rule-based regime
+_EMPTY_THRESHOLD  = 2000    # below this → empty (sum of all 9 ADC values)
+_OBJECT_THRESHOLD = 8000    # 2000 – 8000 → might be an object, not a person
 
-class PostureMLP(nn.Module):
-    """
-    Multi-Layer Perceptron for posture classification.
-
-    This is the canonical model architecture. Train this class and
-    save its state dict with:
-        torch.save(model.state_dict(), "ai/models/posture_model.pt")
-
-    Architecture:
-        Linear(4, 32) -> BatchNorm1d(32) -> ReLU -> Dropout(0.2)
-        -> Linear(32, 16) -> ReLU
-        -> Linear(16, 5)   [logits, no softmax – use CrossEntropyLoss]
-    """
-
-    NUM_CLASSES = 5
-    INPUT_DIM   = 9
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.network = nn.Sequential(
-            nn.Linear(self.INPUT_DIM, 32),
-            nn.BatchNorm1d(32),
-            nn.ReLU(),
-            nn.Dropout(p=0.2),
-            nn.Linear(32, 16),
-            nn.ReLU(),
-            nn.Linear(16, self.NUM_CLASSES),
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            x: Float tensor of shape (batch_size, 9).
-        Returns:
-            Logit tensor of shape (batch_size, 5).
-        """
-        return self.network(x)
-
-
-# ---------------------------------------------------------------------------
-# Inference Engine
-# ---------------------------------------------------------------------------
 
 class InferenceEngine:
     """
     Manages model lifecycle (load, eval, predict) with a graceful fallback.
 
+    Load priority:
+      1. Keras CNN model (.h5) + sklearn scaler (.pkl) from smart-cushion-AI
+      2. Rule-based heuristic classifier (always available as fallback)
+
     Usage:
-        engine = InferenceEngine(model_path="ai/models/posture_model.pt")
-        label, confidence = engine.predict(feature_vector)
+        engine = InferenceEngine(
+            model_path  = "ai/models/smart_cushion_model.h5",
+            scaler_path = "ai/models/fsr_scaler.pkl",
+        )
+        label, confidence = engine.predict(raw_sensor_array)
     """
 
-    def __init__(self, model_path: str) -> None:
-        """
-        Args:
-            model_path: Path to a saved PostureMLP state dict (.pt file).
-                        If the file does not exist, the rule-based stub is used.
-        """
-        self._model_path = Path(model_path)
-        self._model: PostureMLP | None = None
+    def __init__(
+        self,
+        model_path:  str = "ai/models/smart_cushion_model.h5",
+        scaler_path: str = "ai/models/fsr_scaler.pkl",
+    ) -> None:
+        self._model_path  = Path(model_path)
+        self._scaler_path = Path(scaler_path)
+        self._model  = None
+        self._scaler = None
         self._use_stub = False
+        self._is_binary = True   # True until an 11-class model is available
+
         self._load_model()
 
     # ── Public API ─────────────────────────────────────────────────────────
@@ -118,113 +110,171 @@ class InferenceEngine:
         """True when no trained model was found and the rule-based stub is active."""
         return self._use_stub
 
-    def predict(self, features: np.ndarray) -> Tuple[PostureLabel, float]:
+    def predict(self, raw_sensors: np.ndarray) -> Tuple[PostureLabel, float]:
         """
-        Predict posture from a normalised 9-element feature vector.
+        Predict an 11-label posture/state from raw FSR sensor values.
 
         Args:
-            features: numpy float32 array of shape (9,) with values in [0, 1].
-                      Order: [fl, fm, fr, ml, mc, mr, bl, bm, br]
+            raw_sensors: numpy int/float array of shape (9,) with raw ADC values
+                         [FL, FM, FR, ML, MM, MR, BL, BM, BR], range 0–4095.
+                         NOTE: raw values (not normalised) — scaler handles this.
 
         Returns:
             Tuple of (PostureLabel, confidence) where confidence ∈ [0.0, 1.0].
         """
+        total_pressure = int(raw_sensors.sum())
+
+        # ── Pre-check: empty / object via pressure threshold ────────────────
+        # This acts as a fast gate before the CNN runs.
+        if total_pressure < _EMPTY_THRESHOLD:
+            logger.debug(f"Pre-gate: EMPTY (total_pressure={total_pressure})")
+            return PostureLabel.EMPTY, 0.98
+
+        if total_pressure < _OBJECT_THRESHOLD:
+            logger.debug(f"Pre-gate: OBJECT (total_pressure={total_pressure})")
+            return PostureLabel.OBJECT, 0.80
+
+        # ── Person is seated: run model inference ───────────────────────────
         if self._use_stub:
-            return self._rule_based_predict(features)
+            return self._rule_based_predict(raw_sensors)
 
-        # ── PyTorch inference ────────────────────────────────────────────
-        with torch.no_grad():
-            x = torch.from_numpy(features).float().unsqueeze(0)  # shape: (1, 9)
-            logits = self._model(x)                              # shape: (1, 5)
-            probs = torch.softmax(logits, dim=-1)                # shape: (1, 5)
-            predicted_idx = int(probs.argmax(dim=-1).item())
-            confidence = float(probs[0, predicted_idx].item())
+        return self._keras_predict(raw_sensors)
 
-        label = POSTURE_LABELS[predicted_idx]
-        logger.debug(f"PyTorch prediction: {label.value} (confidence={confidence:.3f})")
-        return label, confidence
+    # ── Private: Keras CNN inference ───────────────────────────────────────
 
-    # ── Private helpers ────────────────────────────────────────────────────
+    def _keras_predict(self, raw_sensors: np.ndarray) -> Tuple[PostureLabel, float]:
+        """
+        Run the Keras CNN model (currently binary, maps to 11-class output).
+
+        Input pipeline:
+          raw ADC (9,) → MinMaxScaler → reshape(1, 3, 3, 1) → CNN → sigmoid score
+        """
+        try:
+            import pandas as pd
+
+            fsr_cols = [
+                'FSR Front Left',  'FSR Front Mid',  'FSR Front Right',
+                'FSR Mid Left',    'FSR Mid Mid',    'FSR Mid Right',
+                'FSR Back Left',   'FSR Back Mid',   'FSR Back Right',
+            ]
+            input_df = pd.DataFrame([raw_sensors.tolist()], columns=fsr_cols)
+            scaled   = self._scaler.transform(input_df)     # (1, 9) MinMax scaled
+            cnn_in   = scaled.reshape(1, 3, 3, 1)           # reshape for Conv2D
+
+            score = float(self._model.predict(cnn_in, verbose=0)[0][0])
+
+            if self._is_binary:
+                # Binary model: score ≥ 0.5 → NUP (correct), < 0.5 → LF (bad)
+                if score >= 0.5:
+                    label      = _BINARY_POS_LABEL
+                    confidence = score
+                else:
+                    label      = _BINARY_NEG_LABEL
+                    confidence = 1.0 - score
+            else:
+                # Future: multi-class softmax → argmax
+                predicted_idx = int(np.argmax(score))
+                confidence    = float(np.max(score))
+                label         = POSTURE_LABELS_11[predicted_idx]
+
+            logger.debug(f"Keras prediction: {label.value} (confidence={confidence:.3f}, score={score:.4f})")
+            return label, round(confidence, 4)
+
+        except Exception as exc:
+            logger.error(f"Keras inference failed: {exc}. Falling back to rule-based.")
+            return self._rule_based_predict(raw_sensors)
+
+    # ── Private: model loading ─────────────────────────────────────────────
 
     def _load_model(self) -> None:
-        """Load the PyTorch model state dict from disk."""
-        if not self._model_path.exists():
+        """Load Keras model and sklearn scaler from disk."""
+        model_ok  = self._model_path.exists()
+        scaler_ok = self._scaler_path.exists()
+
+        if not model_ok or not scaler_ok:
+            missing = []
+            if not model_ok:  missing.append(str(self._model_path))
+            if not scaler_ok: missing.append(str(self._scaler_path))
             logger.warning(
-                f"Model file not found at '{self._model_path}'. "
-                "Falling back to the built-in rule-based classifier. "
-                "Train a model and place the .pt file there to enable AI inference."
+                f"AI model file(s) not found: {missing}. "
+                "Falling back to rule-based classifier. "
+                "Copy smart_cushion_model.h5 and fsr_scaler.pkl to ai/models/."
             )
             self._use_stub = True
             return
 
         try:
-            self._model = PostureMLP()
-            # map_location="cpu" ensures the model loads on CPU-only machines
-            state_dict = torch.load(self._model_path, map_location="cpu", weights_only=True)
-            self._model.load_state_dict(state_dict)
-            self._model.eval()
-            logger.info(f"PyTorch model loaded from '{self._model_path}'")
+            import tensorflow as tf
+            self._model  = tf.keras.models.load_model(str(self._model_path), compile=False)
+            self._scaler = joblib.load(str(self._scaler_path))
+
+            # Detect binary vs multi-class from output shape
+            output_units = self._model.output_shape[-1]
+            if output_units == 1:
+                self._is_binary = True
+                logger.info(
+                    f"Keras binary CNN loaded from '{self._model_path}' "
+                    f"(maps to NUP / LF for now — retrain with 11 classes for full support)"
+                )
+            else:
+                self._is_binary = False
+                logger.info(
+                    f"Keras {output_units}-class CNN loaded from '{self._model_path}'"
+                )
         except Exception as exc:
             logger.error(
-                f"Failed to load model from '{self._model_path}': {exc}. "
-                "Falling back to rule-based classifier."
+                f"Failed to load Keras model: {exc}. Falling back to rule-based classifier."
             )
-            self._model = None
+            self._model  = None
+            self._scaler = None
             self._use_stub = True
 
+    # ── Private: rule-based fallback ───────────────────────────────────────
+
     @staticmethod
-    def _rule_based_predict(features: np.ndarray) -> Tuple[PostureLabel, float]:
+    def _rule_based_predict(raw_sensors: np.ndarray) -> Tuple[PostureLabel, float]:
         """
-        Heuristic posture classifier based on FSR pressure symmetry.
+        Heuristic posture classifier using FSR pressure symmetry.
 
-        Rationale:
-        - Left-leaning: significantly more pressure on left sensors (FL + BL).
-        - Right-leaning: significantly more pressure on right sensors (FR + BR).
-        - Slouching forward: significantly more pressure on front (FL + FR).
-        - Leaning back: significantly more pressure on rear (BL + BR).
-        - Otherwise: pressure is relatively symmetric → correct posture.
-
-        The threshold of 0.25 means a side must carry ≥25% more of the total
-        weight before a deviation is flagged. Adjust via model training or
-        the INCORRECT_POSTURE_ALERT_THRESHOLD setting.
-
-        Args:
-            features: [fl, fm, fr, ml, mm, mr, bl, bm, br] normalised in [0, 1].
-
-        Returns:
-            (PostureLabel, confidence) with confidence ∈ [0.35, 0.95].
+        Uses raw ADC values directly (normalisation done internally).
+        Returns one of: NUP, LF, LB, LFSR, LFSL  (simplified 5-label subset).
+        CRLL / CLLL / CRL / CLL require training data to distinguish reliably.
         """
-        fl, fm, fr, ml, mm, mr, bl, bm, br = features.tolist()
+        fl, fm, fr, ml, mm, mr, bl, bm, br = raw_sensors.tolist()
         total = fl + fm + fr + ml + mm + mr + bl + bm + br
 
-        # Treat negligible total pressure as unknown (should not happen if
-        # person_detected is True, but guard against edge cases)
-        if total < 0.02:
-            return PostureLabel.CORRECT, 0.5
+        if total < 1:
+            return PostureLabel.NUP, 0.50
 
-        left  = fl + ml + bl
-        right = fr + mr + br
-        front = fl + fm + fr
-        back  = bl + bm + br
+        # Relative proportion per sensor
+        left  = (fl + ml + bl) / total
+        right = (fr + mr + br) / total
+        front = (fl + fm + fr) / total
+        back  = (bl + bm + br) / total
 
-        # Normalised difference: positive → more weight on left/front side
-        lr_diff = (left  - right) / (left  + right + 1e-6)
-        fb_diff = (front - back)  / (front + back  + 1e-6)
+        lr_diff = left  - right
+        fb_diff = front - back
 
-        THRESHOLD = 0.25  # Asymmetry ratio to trigger a deviation label
+        THRESHOLD = 0.15
 
         abs_lr = abs(lr_diff)
         abs_fb = abs(fb_diff)
 
         if abs_lr >= abs_fb and abs_lr > THRESHOLD:
-            label      = PostureLabel.LEAN_LEFT if lr_diff > 0 else PostureLabel.LEAN_RIGHT
-            confidence = min(0.95, 0.35 + abs_lr)
+            if lr_diff > 0:
+                label = PostureLabel.LFSL   # more pressure left → lean fwd-support left
+            else:
+                label = PostureLabel.LFSR   # more pressure right
+            confidence = min(0.90, 0.45 + abs_lr)
         elif abs_fb > abs_lr and abs_fb > THRESHOLD:
-            label      = PostureLabel.SLOUCH_FORWARD if fb_diff > 0 else PostureLabel.LEAN_BACK
-            confidence = min(0.95, 0.35 + abs_fb)
+            if fb_diff > 0:
+                label = PostureLabel.LF     # more pressure front → lean forward
+            else:
+                label = PostureLabel.LB     # more pressure back → lean backward
+            confidence = min(0.90, 0.45 + abs_fb)
         else:
-            label      = PostureLabel.CORRECT
-            confidence = max(0.35, 0.85 - max(abs_lr, abs_fb))
+            label      = PostureLabel.NUP
+            confidence = max(0.40, 0.85 - max(abs_lr, abs_fb))
 
         logger.debug(f"Rule-based prediction: {label.value} (confidence={confidence:.3f})")
-        return label, confidence
+        return label, round(confidence, 4)

@@ -2,19 +2,17 @@
 Sensor data preprocessor for the Smart Cushion Fog Node.
 
 Responsibilities:
-  1. Detect human presence using total FSR pressure (sum of all 4 sensors).
-  2. Convert raw FSR pressure to relative percentages (0.0 to 1.0) so the
-     model is independent of the person's absolute body weight.
+  1. Extract raw FSR values as a numpy array suitable for the InferenceEngine.
+  2. Temperature is passed through for reporting only — NOT used for
+     person/occupancy detection (AI model handles that via FSR pressure).
 
-Design notes:
-  - Person detection uses total FSR sum, NOT temperature.
-    Reason: the temperature sensor measures ambient room temperature (~20-25°C)
-    and does NOT detect body heat, so it cannot reliably determine if someone
-    is seated.
-  - FSR feature extraction calculates relative proportion (each sensor / total pressure).
-    This makes the AI inference robust to different occupant weights.
-  - The fsr_presence_threshold (default: 1000) should be tuned based on the
-    observed empty-cushion FSR readings for your specific hardware.
+Design notes (system_architecture.md §1):
+  - The AI model outputs 11 labels including `empty` and `object`, which
+    fully replaces any threshold-based person detection.
+  - Temperature sensor measures ambient room temperature; it cannot reliably
+    detect body heat from a cushion sensor position.
+  - Raw ADC values (0–4095) are passed directly to InferenceEngine; the
+    sklearn MinMaxScaler inside the engine handles normalisation.
 """
 
 import logging
@@ -23,124 +21,96 @@ from data.schema import AggregatedSensorReading
 
 logger = logging.getLogger(__name__)
 
-# Full-scale ADC value for ESP32 (12-bit -> 4095)
-_FSR_MAX = 4095.0
+# FSR sensor order used by the model (must match training column order)
+_FSR_KEYS = [
+    "fsr_front_left",  "fsr_front_mid",  "fsr_front_right",
+    "fsr_mid_left",    "fsr_mid_mid",    "fsr_mid_right",
+    "fsr_back_left",   "fsr_back_mid",   "fsr_back_right",
+]
 
 
 class Preprocessor:
     """
-    Converts aggregated SensorReadingState objects into normalised feature vectors
-    ready for the AI inference engine.
-
-    Hardware context:
-      - FSR402 sensors output raw ADC values (0-4095, 12-bit ESP32).
-      - Observed values with person seated: ~2400-3100 per sensor.
-      - Temperature sensor measures AMBIENT temperature (room, ~20-25 degrees C),
-        not body temperature -- cannot be used for person detection.
+    Converts AggregatedSensorReading objects into raw feature vectors for
+    the InferenceEngine.  Occupancy / person-detection is entirely handled
+    by the AI model — this class is intentionally logic-free.
     """
 
     def __init__(
         self,
-        fsr_presence_threshold: int = 1000,
-        temperature_threshold: float = 30.0,   # kept for backward compat, unused
+        temperature_threshold: float = 30.0,   # kept for API compatibility, not used
+        fsr_presence_threshold: int = 1000,     # kept for API compatibility, not used
     ) -> None:
         """
         Args:
-            fsr_presence_threshold: Minimum total FSR ADC sum (all 9 sensors)
-                to consider a person as seated. Default 1000 is conservative
-                -- tune higher if the empty-cushion baseline sum is above this.
-            temperature_threshold: Deprecated. Kept for compatibility but no
-                longer used for person detection (temperature sensor measures
-                ambient air, not body heat).
+            temperature_threshold:  Deprecated. Retained for backwards compatibility.
+                                    Temperature is no longer used for person detection.
+            fsr_presence_threshold: Deprecated. Retained for backwards compatibility.
+                                    Occupancy detection is fully handled by the AI model.
         """
-        self._fsr_threshold = fsr_presence_threshold
-        self._temp_threshold = temperature_threshold   # retained, unused
-        logger.info(
-            f"Preprocessor initialised: fsr_presence_threshold={fsr_presence_threshold}, "
-            f"fsr_max={int(_FSR_MAX)}"
-        )
+        # Parameters retained for callers that still pass them; not used internally
+        _ = temperature_threshold
+        _ = fsr_presence_threshold
+        logger.info("Preprocessor initialised (occupancy detection → AI model)")
 
-    # -- Public API -----------------------------------------------------------
+    # ── Public API ─────────────────────────────────────────────────────────
 
-    def is_person_present(self, sensors: AggregatedSensorReading) -> bool:
+    def extract_raw(self, sensors: AggregatedSensorReading) -> np.ndarray:
         """
-        Determine whether a human is sitting on the cushion.
+        Return a raw ADC array of shape (9,) for the InferenceEngine.
 
-        Uses the SUM of all 9 FSR sensor readings as the pressure indicator.
-        A person is considered present when:
-            fsr_front_left + fsr_front_mid + ... + fsr_back_right
-            >= fsr_presence_threshold
+        The array order matches the training data columns:
+          [FL, FM, FR, ML, MM, MR, BL, BM, BR]
 
-        NOTE: Temperature is NOT used here because the onboard temperature
-        sensor measures ambient room temperature (~20 degrees C), not body surface
-        temperature. Total FSR pressure is a more reliable presence signal.
-
-        Returns:
-            True  -> a person is present, proceed with posture classification.
-            False -> seat is empty, skip inference and send no alerts.
-        """
-        total_pressure = (
-            sensors.fsr_front_left
-            + sensors.fsr_front_mid
-            + sensors.fsr_front_right
-            + sensors.fsr_mid_left
-            + sensors.fsr_mid_mid
-            + sensors.fsr_mid_right
-            + sensors.fsr_back_left
-            + sensors.fsr_back_mid
-            + sensors.fsr_back_right
-        )
-        present = total_pressure >= self._fsr_threshold
-        if not present:
-            logger.debug(
-                f"No person detected: total FSR={total_pressure} "
-                f"(threshold={self._fsr_threshold})"
-            )
-        else:
-            logger.debug(
-                f"Person detected: total FSR={total_pressure} "
-                f"(threshold={self._fsr_threshold})"
-            )
-        return present
-
-    def extract_features(self, sensors: AggregatedSensorReading) -> np.ndarray:
-        """
-        Convert raw FSR pressure into a weight-independent relative percentage vector.
-
-        The returned array has shape (9,) with values representing the percentage
-        of pressure on each sensor:
-            [fl, fm, fr, ml, mm, mr, bl, bm, br]
-        The sum of the features will be exactly 1.0 if a person is seated.
+        The InferenceEngine's sklearn scaler handles MinMax normalisation
+        before feeding the values into the CNN.
 
         Args:
             sensors: Validated AggregatedSensorReading from the ESP32.
 
         Returns:
-            numpy float32 array of shape (9,).
+            numpy float32 array of shape (9,) with values in [0, 4095].
         """
         raw = np.array(
-            [
-                sensors.fsr_front_left,
-                sensors.fsr_front_mid,
-                sensors.fsr_front_right,
-                sensors.fsr_mid_left,
-                sensors.fsr_mid_mid,
-                sensors.fsr_mid_right,
-                sensors.fsr_back_left,
-                sensors.fsr_back_mid,
-                sensors.fsr_back_right,
-            ],
+            [getattr(sensors, k) for k in _FSR_KEYS],
             dtype=np.float32,
         )
+        logger.debug(f"Raw FSR array: {raw.astype(int).tolist()}  sum={int(raw.sum())}")
+        return raw
 
-        total_pressure = raw.sum()
-        if total_pressure > 0:
-            features = raw / total_pressure
-        else:
-            features = np.zeros(9, dtype=np.float32)
+    def get_temperature(self, sensors: AggregatedSensorReading) -> float:
+        """
+        Return the temperature reading for reporting purposes only.
 
-        # Clip to [0, 1] as a safety guard
-        features = np.clip(features, 0.0, 1.0)
+        Temperature is NOT used for occupancy detection.
 
-        logger.debug(f"Features (relative %): {features}  total_raw={int(total_pressure)}")
-        return features
+        Returns:
+            Temperature in °C (float, 0–100).
+        """
+        return round(sensors.temperature, 1)
+
+    # ── Deprecated compatibility shim ─────────────────────────────────────
+
+    def is_person_present(self, sensors: AggregatedSensorReading) -> bool:
+        """
+        DEPRECATED: Occupancy is now determined by the AI model (PostureLabel).
+
+        This method is retained so that older callers don't break.
+        It always returns True when total FSR pressure > 1000 ADC units,
+        but the actual occupancy decision should come from the AI label.
+        """
+        logger.warning(
+            "is_person_present() is deprecated. Use InferenceEngine.predict() "
+            "and check PostureLabel for empty/object/posture state."
+        )
+        total = sum(getattr(sensors, k) for k in _FSR_KEYS)
+        return total >= 1000
+
+    def extract_features(self, sensors: AggregatedSensorReading) -> np.ndarray:
+        """
+        DEPRECATED: Use extract_raw() instead.
+
+        Kept for backwards compatibility. Returns raw ADC values (previously
+        returned relative proportions, but the new Keras engine needs raw ADC).
+        """
+        return self.extract_raw(sensors)
