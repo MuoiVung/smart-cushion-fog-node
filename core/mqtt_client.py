@@ -2,8 +2,8 @@
 MQTT Client for the Smart Cushion Fog Node.
 
 Handles bidirectional MQTT communication between the Fog Node and the ESP32:
-  - Subscribe to cushion/raw   → receive raw sensor JSON
-  - Publish to cushion/control → send vibration commands to ESP32
+  - Subscribe to cushion/raw      → receive raw sensor JSON  (Interface 01)
+  - Publish to cushion/command    → send vibration commands   (Interface 05)
 
 Implementation notes:
   paho-mqtt's network loop runs in its own thread. Incoming messages are

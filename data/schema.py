@@ -5,14 +5,22 @@ Every message entering or leaving the Fog Node is validated against
 these Pydantic v2 models, catching malformed payloads early and
 providing clear error messages during development.
 
-Message flow:
-  ESP32 -> MQTT(cushion/raw)  -> RawMessage
-  Fog   -> MQTT(cushion/ctrl) -> ControlCommand
-  Fog   -> WebSocket          -> WebSocketBroadcast
-  Fog   -> MQTT(cushion/sync) -> CloudSyncPayload (AWS IoT Core)
+Message flow (ref: system_architecture.md):
+  ESP32 → MQTT(cushion/raw)     → RawMessage
+  Fog   → MQTT(cushion/command) → ControlCommand
+  Fog   → WebSocket             → FogRealtimeUpdate      (Interface 02)
+  Fog   → MQTT(cushion/{id}/event)     → CloudEventRecord
+  Fog   → MQTT(cushion/{id}/telemetry) → CloudTelemetryRecord
+  Fog   → MQTT(cushion/{id}/summary)   → CloudSummaryRecord
 """
 
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timezone
 from enum import Enum
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -21,150 +29,231 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 class PostureLabel(str, Enum):
-    """All posture states the AI engine can detect."""
-    CORRECT         = "correct"
-    LEAN_LEFT       = "lean_left"
-    LEAN_RIGHT      = "lean_right"
-    SLOUCH_FORWARD  = "slouch_forward"
-    LEAN_BACK       = "lean_back"
-    UNKNOWN         = "unknown"   # Used when no person is detected
+    """9 posture states the AI engine can detect (system_architecture.md §1)."""
+    NUP  = "NUP"   # Natural Upright Posture  – correct
+    LF   = "LF"    # Lean Forward
+    LB   = "LB"    # Lean Backward
+    LFSR = "LFSR"  # Lean Forward-Support Right
+    LFSL = "LFSL"  # Lean Forward-Support Left
+    CRL  = "CRL"   # Cross-Right Legged
+    CLL  = "CLL"   # Cross-Left Legged
+    CRLL = "CRLL"  # Cross-Right Legged-Legged
+    CLLL = "CLLL"  # Cross-Left Legged-Legged
+    UNKNOWN = "unknown"  # No person detected
+
+
+GOOD_POSTURES: frozenset[PostureLabel] = frozenset({PostureLabel.NUP})
+
+
+class OccupancyState(str, Enum):
+    OCCUPIED  = "occupied"
+    EMPTY     = "empty"
+    UNCERTAIN = "uncertain"
+
+
+class AlertStatus(str, Enum):
+    IDLE     = "IDLE"
+    WARNING  = "WARNING"
+    COOLDOWN = "COOLDOWN"
+
+
+class EventType(str, Enum):
+    ALERT_TRIGGERED = "alert_triggered"
+    SESSION_STARTED = "session_started"
+    SESSION_ENDED   = "session_ended"
 
 
 # ---------------------------------------------------------------------------
-# Edge -> Fog (MQTT cushion/raw)
+# Edge → Fog  (MQTT  cushion/raw)  — Interface 01
 # ---------------------------------------------------------------------------
 
 class SensorReading(BaseModel):
     """
-    Partial raw sensor values from the ESP32 hardware.
-    Since sensors are split between 2 ESP32s, fields are optional.
-    
-    FSR sensors (FSR402 - Interlink Electronics):
-      - Return raw 12-bit ADC values via ESP32 analogRead() (range: 0–4095).
+    Partial raw sensor values from one ESP32.
+    Fields are Optional because the 9 FSRs are split across two boards.
+    All ADC values are 12-bit (0–4095).
     """
-    fsr_front_left:  int | None = Field(default=None, ge=0, le=4095)
-    fsr_front_mid:   int | None = Field(default=None, ge=0, le=4095)
-    fsr_front_right: int | None = Field(default=None, ge=0, le=4095)
-    fsr_mid_left:    int | None = Field(default=None, ge=0, le=4095)
-    fsr_mid_mid:     int | None = Field(default=None, ge=0, le=4095)
-    fsr_mid_right:   int | None = Field(default=None, ge=0, le=4095)
-    fsr_back_left:   int | None = Field(default=None, ge=0, le=4095)
-    fsr_back_mid:    int | None = Field(default=None, ge=0, le=4095)
-    fsr_back_right:  int | None = Field(default=None, ge=0, le=4095)
-    temperature:     float | None = Field(default=None, ge=-40.0, le=125.0)
+    # ESP32-1: 4 corner FSRs + temperature
+    fsr_front_left:  Optional[int]   = Field(default=None, ge=0, le=4095)
+    fsr_front_right: Optional[int]   = Field(default=None, ge=0, le=4095)
+    fsr_back_left:   Optional[int]   = Field(default=None, ge=0, le=4095)
+    fsr_back_right:  Optional[int]   = Field(default=None, ge=0, le=4095)
+    temperature:     Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    # ESP32-2: 5 inner FSRs
+    fsr_front_mid:   Optional[int]   = Field(default=None, ge=0, le=4095)
+    fsr_mid_mid:     Optional[int]   = Field(default=None, ge=0, le=4095)
+    fsr_back_mid:    Optional[int]   = Field(default=None, ge=0, le=4095)
+    fsr_mid_left:    Optional[int]   = Field(default=None, ge=0, le=4095)
+    fsr_mid_right:   Optional[int]   = Field(default=None, ge=0, le=4095)
 
-class AggregatedSensorReading(BaseModel):
-    """Aggregated state from all 9 FSR sensors + temperature."""
-    fsr_front_left:  int = Field(default=0, ge=0, le=4095)
-    fsr_front_mid:   int = Field(default=0, ge=0, le=4095)
-    fsr_front_right: int = Field(default=0, ge=0, le=4095)
-    fsr_mid_left:    int = Field(default=0, ge=0, le=4095)
-    fsr_mid_mid:     int = Field(default=0, ge=0, le=4095)
-    fsr_mid_right:   int = Field(default=0, ge=0, le=4095)
-    fsr_back_left:   int = Field(default=0, ge=0, le=4095)
-    fsr_back_mid:    int = Field(default=0, ge=0, le=4095)
-    fsr_back_right:  int = Field(default=0, ge=0, le=4095)
-    temperature:     float = Field(default=25.0, ge=-40.0, le=125.0)
+
+class ActuatorState(BaseModel):
+    """Actuator state reported by ESP32-1."""
+    vibration_status: bool = False
 
 
 class RawMessage(BaseModel):
     """
-    Full JSON payload published by the ESP32 to MQTT topic cushion/raw.
-
-    Real hardware example (FSR402 + NTC thermistor, person NOT seated):
-        {
-            "device_id":  "esp32-cushion-01",
-            "timestamp":  115.265,
-            "sensors": {
-                "fsr_front_left":  2788,
-                "fsr_front_right": 3052,
-                "fsr_back_left":   2590,
-                "fsr_back_right":  2428,
-                "temperature":     20.4
-            }
-        }
-
-    Notes:
-      - timestamp: seconds since ESP32 boot (millis()/1000), NOT Unix epoch.
-      - temperature 20.4 °C → below 30 °C threshold → person_detected = False.
-      - FSR values ~2400–3100 at rest (no weight) due to sensor baseline offset.
+    Full JSON payload published by an ESP32 to MQTT topic cushion/raw.
+    Matches system_architecture.md §2.1 Interface 01.
     """
     device_id: str
     timestamp: float = Field(..., description="Seconds since ESP32 boot (millis()/1000)")
     sensors:   SensorReading
+    actuator:  Optional[ActuatorState] = None   # Only present in ESP32-1 payloads
+
+
+class AggregatedSensorReading(BaseModel):
+    """
+    Merged state of all 9 FSR sensors + temperature.
+    The Fog updates this incrementally as messages arrive from each ESP32.
+    """
+    fsr_front_left:  int   = Field(default=0, ge=0, le=4095)
+    fsr_front_right: int   = Field(default=0, ge=0, le=4095)
+    fsr_back_left:   int   = Field(default=0, ge=0, le=4095)
+    fsr_back_right:  int   = Field(default=0, ge=0, le=4095)
+    fsr_front_mid:   int   = Field(default=0, ge=0, le=4095)
+    fsr_mid_mid:     int   = Field(default=0, ge=0, le=4095)
+    fsr_back_mid:    int   = Field(default=0, ge=0, le=4095)
+    fsr_mid_left:    int   = Field(default=0, ge=0, le=4095)
+    fsr_mid_right:   int   = Field(default=0, ge=0, le=4095)
+    temperature:     float = Field(default=25.0, ge=0.0, le=100.0)
+
+    def as_heatmap_pct(self) -> list[float]:
+        """
+        Returns 9 FSR values as percentage (0–100) in the order used by
+        sensors_heatmap_pct in the WebSocket broadcast (row-major, left→right,
+        top→bottom):
+          [FL, FM, FR, ML, MM, MR, BL, BM, BR]
+        """
+        keys = [
+            "fsr_front_left", "fsr_front_mid",  "fsr_front_right",
+            "fsr_mid_left",   "fsr_mid_mid",    "fsr_mid_right",
+            "fsr_back_left",  "fsr_back_mid",   "fsr_back_right",
+        ]
+        return [round(getattr(self, k) / 4095 * 100, 1) for k in keys]
 
 
 # ---------------------------------------------------------------------------
-# Fog -> Edge (MQTT cushion/control)
+# Fog → Edge  (MQTT  cushion/command)  — Interface 05
 # ---------------------------------------------------------------------------
 
 class ControlCommand(BaseModel):
     """
-    Command sent from Fog Node back to the ESP32 to trigger the vibration motor.
-
-    The ESP32 subscribes to MQTT topic cushion/control and activates the motor
-    for `duration_ms` milliseconds upon receiving this message.
+    Command sent from the Fog Node to ESP32-1 to control the vibration motor.
+    Matches system_architecture.md §2.2 Interface 05.
     """
-    command:     str = Field(default="vibrate", description="Action for the ESP32 to execute")
-    duration_ms: int = Field(default=1000, ge=100, le=10000, description="Vibration duration (ms)")
-    reason:      str = Field(default="",   description="The detected posture that triggered the alert")
+    device_id: str    = Field(default="esp32-1")
+    command:   str    = Field(default="vibrate")
+    active:    bool   = Field(default=True)
+    pattern:   Optional[str] = Field(default="short_triple",
+                                     description="short_triple | long_single")
+    intensity: int    = Field(default=200, ge=0, le=255,
+                              description="PWM duty cycle (0–255)")
 
 
 # ---------------------------------------------------------------------------
-# Fog -> Web App (WebSocket)
+# Fog → Local App  (WebSocket)  — Interface 02
 # ---------------------------------------------------------------------------
 
-class WebSocketBroadcast(BaseModel):
+def _new_session_id() -> str:
+    now = datetime.now(timezone.utc)
+    return f"sess-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
+
+
+class FogRealtimeUpdate(BaseModel):
     """
-    Real-time posture data streamed to connected Web App clients via WebSocket.
-    Sent after every sensor reading is processed by the AI engine.
+    Real-time update broadcast to the local app via WebSocket every 0.5 s.
+    Matches system_architecture.md §2.3 Interface 02.
+    Field names are 100% in sync with cloud schemas.
     """
-    timestamp:       float
-    posture:         PostureLabel
-    confidence:      float        = Field(..., ge=0.0, le=1.0)
-    person_detected: bool
-    sensors:         AggregatedSensorReading
-    features:        list[float] | None = Field(default=None, description="Processed AI features (0.0 to 1.0)")
-    alert_sent:      bool         = Field(description="True if vibration was triggered this cycle")
-    trigger_device_id: str        = Field(default="unknown", description="Which ESP32 triggered this broadcast")
+    record_type:            str            = "realtime_update"
+    device_id:              str            = Field(default="cushion-01")
+    session_id:             str            = Field(default_factory=_new_session_id)
+    session_start_time_iso: str            = Field(default="")
+    occupancy_state:        OccupancyState = OccupancyState.EMPTY
+    posture:                PostureLabel   = PostureLabel.UNKNOWN
+    temperature:            float          = Field(default=0.0, ge=0.0, le=100.0)
+    alert_active:           bool           = False
+    alert_status:           AlertStatus    = AlertStatus.IDLE
+    alert_count:            int            = Field(default=0, ge=0)
+    session_duration_sec:   int            = Field(default=0, ge=0)
+    sensors_heatmap_pct:    list[float]    = Field(default_factory=lambda: [0.0] * 9)
 
 
 # ---------------------------------------------------------------------------
-# Fog -> Cloud (MQTT cushion/sync to AWS IoT Core)
+# Fog → Cloud  (AWS IoT Core MQTT)  — Interface 03
 # ---------------------------------------------------------------------------
 
-class PostureCounts(BaseModel):
-    """Per-posture reading counts within a sync window."""
-    correct:        int = 0
-    lean_left:      int = 0
-    lean_right:     int = 0
-    slouch_forward: int = 0
-    lean_back:      int = 0
+def _new_record_id(prefix: str) -> str:
+    now = datetime.now(timezone.utc)
+    return f"{prefix}-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:5].upper()}"
 
 
-class CloudSyncPayload(BaseModel):
+class CloudEventRecord(BaseModel):
     """
-    Session summary published to AWS IoT Core every CLOUD_SYNC_INTERVAL seconds.
-
-    This is the only data that leaves the local network, ensuring user
-    privacy while still enabling cloud-based historical analytics.
-
-    Example:
-        {
-            "device_id":         "esp32-cushion-01",
-            "window_start":      1712345600.0,
-            "window_end":        1712345660.0,
-            "correct_seconds":   45.0,
-            "incorrect_seconds": 15.0,
-            "posture_counts": {
-                "correct": 9, "lean_left": 2, "lean_right": 1,
-                "slouch_forward": 1, "lean_back": 0
-            }
-        }
+    Event Record – published on cushion/{device_id}/event.
+    Sent on significant state changes (alert, session start/end).
     """
-    device_id:          str
-    window_start:       float
-    window_end:         float
-    correct_seconds:    float = Field(..., ge=0.0)
-    incorrect_seconds:  float = Field(..., ge=0.0)
-    posture_counts:     PostureCounts
+    record_type:      str       = "event_record"
+    record_id:        str       = Field(default_factory=lambda: _new_record_id("evt"))
+    device_id:        str       = Field(default="cushion-01")
+    session_id:       str       = ""
+    fog_timestamp_iso: str      = Field(default="")
+    event_type:       EventType = EventType.ALERT_TRIGGERED
+    occupancy_state:  OccupancyState = OccupancyState.OCCUPIED
+    posture:          PostureLabel   = PostureLabel.UNKNOWN
+
+
+class CloudTelemetryRecord(BaseModel):
+    """
+    Telemetry Record – published on cushion/{device_id}/telemetry.
+    Sent periodically (e.g., every 30 s) while session is active.
+    """
+    record_type:       str            = "telemetry_record"
+    record_id:         str            = Field(default_factory=lambda: _new_record_id("tel"))
+    device_id:         str            = Field(default="cushion-01")
+    session_id:        str            = ""
+    fog_timestamp_iso: str            = Field(default="")
+    occupancy_state:   OccupancyState = OccupancyState.OCCUPIED
+    posture:           PostureLabel   = PostureLabel.UNKNOWN
+    alert_active:      bool           = False
+
+
+class PostureDurationBreakdown(BaseModel):
+    """Per-posture accumulated duration in seconds for a session summary."""
+    nup_duration_sec:  int = 0
+    lf_duration_sec:   int = 0
+    lb_duration_sec:   int = 0
+    lfsr_duration_sec: int = 0
+    lfsl_duration_sec: int = 0
+    crl_duration_sec:  int = 0
+    cll_duration_sec:  int = 0
+    crll_duration_sec: int = 0
+    clll_duration_sec: int = 0
+
+
+class CloudSummaryRecord(BaseModel):
+    """
+    Summary Record – published on cushion/{device_id}/summary.
+    Sent when a sitting session ends.
+    """
+    record_type:                 str    = "summary_record"
+    record_id:                   str    = Field(default_factory=lambda: _new_record_id("sum"))
+    device_id:                   str    = Field(default="cushion-01")
+    session_id:                  str    = ""
+    fog_timestamp_iso:           str    = Field(default="")
+    start_time:                  str    = ""   # ISO 8601 UTC
+    end_time:                    str    = ""   # ISO 8601 UTC
+    total_sitting_duration_sec:  int    = Field(default=0, ge=0)
+    poor_posture_duration_sec:   int    = Field(default=0, ge=0)
+    alert_count:                 int    = Field(default=0, ge=0)
+    posture_duration_breakdown:  PostureDurationBreakdown = Field(
+        default_factory=PostureDurationBreakdown
+    )
+
+
+# ---------------------------------------------------------------------------
+# Backwards-compatible alias (used in existing cloud_sync.py)
+# ---------------------------------------------------------------------------
+CloudSyncPayload = CloudSummaryRecord
