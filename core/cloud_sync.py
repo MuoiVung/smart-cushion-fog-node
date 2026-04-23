@@ -114,17 +114,18 @@ class CloudSync:
         loop = asyncio.get_event_loop()
 
         try:
+            topic = self._settings.aws_topic_summary.format(device_id=self._settings.device_id)
             result = await loop.run_in_executor(
                 None,
                 lambda: self._client.publish(
-                    topic=self._settings.aws_topic_sync,
+                    topic=topic,
                     payload=message,
                     qos=1,
                 ),
             )
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
                 logger.info(
-                    f"Cloud sync published to '{self._settings.aws_topic_sync}': "
+                    f"Cloud sync published to '{topic}': "
                     f"correct={payload.correct_seconds}s, "
                     f"incorrect={payload.incorrect_seconds}s"
                 )

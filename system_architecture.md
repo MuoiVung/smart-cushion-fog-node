@@ -12,8 +12,8 @@ Mô hình AI nhận diện **11 nhãn** từ dữ liệu 9 cảm biến FSR (3×
 
 | STT | Nhãn | Tên | Đặc điểm |
 | :--- | :--- | :--- | :--- |
-| 0 | **empty** | Empty Cushion | Không có người hoặc vật nào đặt lên đệm. Áp lực toàn bộ rất thấp. |
-| 1 | **object** | Object Detected | Có vật thể đặt lên đệm nhưng **không phải người ngồi** (ví dụ: túi xách, laptop). Áp lực bất thường, không phân bổ như người ngồi. |
+| 0 | **EMPTY** | Empty Cushion | Không có người hoặc vật nào đặt lên đệm. Áp lực toàn bộ rất thấp. |
+| 1 | **OBJECT** | Object Detected | Có vật thể đặt lên đệm nhưng **không phải người ngồi** (ví dụ: túi xách, laptop). Áp lực bất thường, không phân bổ như người ngồi. |
 
 ### 1.2. Nhãn tư thế ngồi (9 nhãn)
 
@@ -35,8 +35,8 @@ Mô hình AI nhận diện **11 nhãn** từ dữ liệu 9 cảm biến FSR (3×
 
 | Nhãn AI | occupancy_state | Cảnh báo rung |
 | :--- | :--- | :--- |
-| `empty` | `empty` | Không |
-| `object` | `uncertain` | Không |
+| `EMPTY` | `empty` | Không |
+| `OBJECT` | `uncertain` | Không |
 | `NUP` | `occupied` | Không (tư thế đúng) |
 | `LF`, `LB`, `LFSR`, `LFSL`, `CRL`, `CLL`, `CRLL`, `CLLL` | `occupied` | Có (sau N lần liên tiếp) |
 

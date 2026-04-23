@@ -40,8 +40,8 @@ class PostureLabel(str, Enum):
       NUP, LF, LB, LFSR, LFSL, CRL, CLL, CRLL, CLLL
     """
     # Surface state labels
-    EMPTY  = "empty"   # Nothing on cushion
-    OBJECT = "object"  # Object detected, not a person
+    EMPTY  = "EMPTY"   # Nothing on cushion
+    OBJECT = "OBJECT"  # Object detected, not a person
 
     # Posture labels (person is seated)
     NUP  = "NUP"   # Natural Upright Posture – correct posture
