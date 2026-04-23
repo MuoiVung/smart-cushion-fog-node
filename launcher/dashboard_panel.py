@@ -81,13 +81,17 @@ class DashboardPanel(ctk.CTkFrame):
                 self._update_bar(self.br_bar, "Back Right", 0.0)
                 return
 
-            posture = payload_dict.get("posture", "UNKNOWN").upper()
-            confidence = payload_dict.get("confidence", 0.0)
-            
+            posture = payload_dict.get("posture", "EMPTY").upper()
+            if posture == "EMPTY":
+                icon = "person_off"
+                color = COLOR["muted"]
+            elif posture == "OBJECT":
+                icon = "category"
+                color = COLOR["warning"]
             # Color logic
             if posture == "CORRECT":
                 color = "#3fb950"  # Green
-            elif posture == "UNKNOWN":
+            elif posture == "EMPTY":
                 color = "gray"
             else:
                 color = "#f85149"  # Red

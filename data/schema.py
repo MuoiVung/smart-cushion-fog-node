@@ -201,7 +201,7 @@ class FogRealtimeUpdate(BaseModel):
     session_id:             str            = Field(default_factory=_new_session_id)
     session_start_time_iso: str            = Field(default="")
     occupancy_state:        OccupancyState = OccupancyState.EMPTY
-    posture:                PostureLabel   = PostureLabel.UNKNOWN
+    posture:                PostureLabel   = PostureLabel.EMPTY
     temperature:            float          = Field(default=0.0, ge=0.0, le=100.0)
     alert_active:           bool           = False
     alert_status:           AlertStatus    = AlertStatus.IDLE
@@ -231,7 +231,7 @@ class CloudEventRecord(BaseModel):
     fog_timestamp_iso: str      = Field(default="")
     event_type:       EventType = EventType.ALERT_TRIGGERED
     occupancy_state:  OccupancyState = OccupancyState.OCCUPIED
-    posture:          PostureLabel   = PostureLabel.UNKNOWN
+    posture:          PostureLabel   = PostureLabel.EMPTY
 
 
 class CloudTelemetryRecord(BaseModel):
@@ -245,7 +245,7 @@ class CloudTelemetryRecord(BaseModel):
     session_id:        str            = ""
     fog_timestamp_iso: str            = Field(default="")
     occupancy_state:   OccupancyState = OccupancyState.OCCUPIED
-    posture:           PostureLabel   = PostureLabel.UNKNOWN
+    posture:           PostureLabel   = PostureLabel.EMPTY
     alert_active:      bool           = False
 
 

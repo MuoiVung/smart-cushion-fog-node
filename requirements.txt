@@ -1,26 +1,22 @@
---extra-index-url https://download.pytorch.org/whl/cpu
-
 # =============================================================
 # Smart Cushion Fog Node – Python Dependencies
-# Install: pip install -r requirements.txt
 # =============================================================
 
-# -- MQTT communication (Edge <-> Fog, Fog -> Cloud) ----------
-paho-mqtt>=1.6.1,<3.0.0
-
-# -- WebSocket server (Fog -> Web App) ------------------------
+# -- Connectivity ---------------------------------------------
+paho-mqtt>=1.6.1,<2.0.0
 websockets>=12.0.0
 
-# -- Data validation at every pipeline stage ------------------
+# -- Configuration & Validation -------------------------------
 pydantic>=2.7.0
 pydantic-settings>=2.3.0
 
-# -- AI Inference (PyTorch CPU-only build ~150MB vs 2GB GPU) --
-# CPU-only is sufficient: this node runs inference, not training.
-torch>=2.0.0
+# -- AI Inference (Keras / TensorFlow) ------------------------
+tensorflow>=2.13.0
 numpy>=1.24.0
-
-# -- Testing --------------------------------------------------
-pytest>=8.0.0
+joblib>=1.3.0
+scikit-learn>=1.3.0
 pandas>=2.0.0
+
+# -- Utilities ------------------------------------------------
 openpyxl>=3.1.0
+pytest>=8.0.0

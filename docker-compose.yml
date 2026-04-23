@@ -64,6 +64,8 @@ services:
       - "8765:8765"
 
     volumes:
+      # Mount the entire code for development
+      - .:/app
       # Mount the AI model directory so weights can be swapped without rebuild
       - ./ai/models:/app/ai/models:ro
       # Mount certs directory for AWS IoT Core (if CLOUD_ENABLED=true)
