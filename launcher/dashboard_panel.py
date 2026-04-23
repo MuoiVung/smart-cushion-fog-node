@@ -66,10 +66,10 @@ class DashboardPanel(ctk.CTkFrame):
 
     def update_data(self, payload_dict: Dict[str, Any]):
         try:
-            detected = payload_dict.get("person_detected", False)
-            if not detected:
+            occupancy = payload_dict.get("occupancy_state", "empty").lower()
+            if occupancy == "empty":
                 self.posture_label.configure(text="No Person Detected", text_color="gray")
-                self.confidence_label.configure(text="Confidence: --%")
+                self.confidence_label.configure(text="Duration: 0s")
                 self._update_bar(self.fl_bar, "Front Left", 0.0)
                 self._update_bar(self.fm_bar, "Front Mid", 0.0)
                 self._update_bar(self.fr_bar, "Front Right", 0.0)
@@ -83,11 +83,9 @@ class DashboardPanel(ctk.CTkFrame):
 
             posture = payload_dict.get("posture", "EMPTY").upper()
             if posture == "EMPTY":
-                icon = "person_off"
-                color = COLOR["muted"]
+                color = "gray"
             elif posture == "OBJECT":
-                icon = "category"
-                color = COLOR["warning"]
+                color = "#d29922" # warning
             # Color logic
             if posture == "CORRECT":
                 color = "#3fb950"  # Green
@@ -97,9 +95,11 @@ class DashboardPanel(ctk.CTkFrame):
                 color = "#f85149"  # Red
                 
             self.posture_label.configure(text=f"Posture: {posture}", text_color=color)
-            self.confidence_label.configure(text=f"Confidence: {int(confidence * 100)}%")
+            
+            duration = payload_dict.get("session_duration_sec", 0)
+            self.confidence_label.configure(text=f"Duration: {duration}s")
 
-            features = payload_dict.get("features")
+            features = payload_dict.get("sensors_heatmap_pct", [])
             if features and len(features) == 9:
                 self._update_bar(self.fl_bar, "Front Left", features[0])
                 self._update_bar(self.fm_bar, "Front Mid", features[1])
@@ -115,6 +115,6 @@ class DashboardPanel(ctk.CTkFrame):
             pass
 
     def _update_bar(self, bar_dict, name, value):
-        val_pct = int(value * 100)
+        val_pct = int(value)
         bar_dict["lbl"].configure(text=f"{name}: {val_pct}%")
-        bar_dict["progress"].set(value)
+        bar_dict["progress"].set(value / 100.0)

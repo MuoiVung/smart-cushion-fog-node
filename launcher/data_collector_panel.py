@@ -15,6 +15,20 @@ PROJECT_ROOT = Path(__file__).parent.parent
 LABELS_FILE = PROJECT_ROOT / "launcher" / "saved_labels.json"
 EXPORT_DIR = PROJECT_ROOT / "data_exports"
 
+LABEL_MAP = {
+    "EMPTY (Cushion is empty)": "EMPTY",
+    "OBJECT (Non-human object)": "OBJECT",
+    "NUP (Natural Upright Posture)": "NUP",
+    "LF (Lean Forward)": "LF",
+    "LB (Lean Backward)": "LB",
+    "LFSR (Lean Forward-Support Right)": "LFSR",
+    "LFSL (Lean Forward-Support Left)": "LFSL",
+    "CRL (Cross-Right Legged)": "CRL",
+    "CLL (Cross-Left Legged)": "CLL",
+    "CRLL (Cross-Right Legged-Legged)": "CRLL",
+    "CLLL (Cross-Left Legged-Legged)": "CLLL"
+}
+
 class DataCollectorPanel(ctk.CTkFrame):
     def __init__(self, master, fg_color="transparent"):
         super().__init__(master, fg_color=fg_color)
@@ -47,13 +61,17 @@ class DataCollectorPanel(ctk.CTkFrame):
         self._build_status_panel()
 
     def _load_labels(self) -> List[str]:
+        labels = list(LABEL_MAP.keys())
         if LABELS_FILE.exists():
             try:
                 with open(LABELS_FILE, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    saved = json.load(f)
+                    for s in saved:
+                        if s not in labels:
+                            labels.append(s)
             except Exception:
-                return []
-        return []
+                pass
+        return labels
 
     def _save_labels(self):
         try:
@@ -174,7 +192,12 @@ class DataCollectorPanel(ctk.CTkFrame):
             self.label_combo.configure(values=self.saved_labels)
             self._save_labels()
 
-        self.current_label = lbl
+        # Map display name to abbreviation for Excel export
+        self.current_label = LABEL_MAP.get(lbl, lbl)
+        if "(" in lbl and ")" in lbl:
+            self.current_posture_name = lbl.split("(")[-1].split(")")[0].strip()
+        else:
+            self.current_posture_name = lbl
         self.collected_data.clear()
         
         self.total_duration_secs = int(dur_mins * 60)
@@ -263,7 +286,8 @@ class DataCollectorPanel(ctk.CTkFrame):
                 "fsr_back_right": "FSR Back Right",
                 "temperature": "Temperature",
                 "person_present": "Person Present",
-                "label": "Label" # Always explicitly required
+                "label": "Label", # Always explicitly required
+                "posture_name": "Posture Name"
             }
             
             # Filter based on checkbox selection
@@ -272,6 +296,7 @@ class DataCollectorPanel(ctk.CTkFrame):
                 if var.get() == True:
                     keep_cols.append(k)
             keep_cols.append("label") # Always keep label
+            keep_cols.append("posture_name")
 
             # Only select available columns matching keep_cols
             available_cols = [c for c in keep_cols if c in df.columns]
@@ -318,6 +343,7 @@ class DataCollectorPanel(ctk.CTkFrame):
             # Use manual toggle for data collection session (Human annotation)
             row["person_present"] = self.person_present_var.get()
             row["label"] = self.current_label
+            row["posture_name"] = getattr(self, "current_posture_name", self.current_label)
             
             self.collected_data.append(row)
             

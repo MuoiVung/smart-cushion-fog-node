@@ -69,8 +69,8 @@ _BINARY_POS_LABEL = PostureLabel.NUP   # score ≥ 0.5
 _BINARY_NEG_LABEL = PostureLabel.LF    # score < 0.5
 
 # FSR total-pressure thresholds for the rule-based regime
-_EMPTY_THRESHOLD  = 2000    # below this → empty (sum of all 9 ADC values)
-_OBJECT_THRESHOLD = 8000    # 2000 – 8000 → might be an object, not a person
+_EMPTY_THRESHOLD  = 1000    # below this → empty (sum of all 9 ADC values)
+_OBJECT_THRESHOLD = 3000    # 1000 – 3000 → might be an object, not a person
 
 
 class InferenceEngine:

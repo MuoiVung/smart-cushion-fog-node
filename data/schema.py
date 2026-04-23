@@ -208,6 +208,7 @@ class FogRealtimeUpdate(BaseModel):
     alert_count:            int            = Field(default=0, ge=0)
     session_duration_sec:   int            = Field(default=0, ge=0)
     sensors_heatmap_pct:    list[float]    = Field(default_factory=lambda: [0.0] * 9)
+    sensors:                dict           = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------

@@ -270,6 +270,7 @@ class FogApplication:
             alert_count=self._alert_count,
             session_duration_sec=session_duration_sec,
             sensors_heatmap_pct=sensors.as_heatmap_pct(),
+            sensors=sensors.model_dump(),
         )
         await self._ws_server.broadcast(broadcast.model_dump())
 

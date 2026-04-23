@@ -348,15 +348,15 @@ class FogLauncherApp(ctk.CTk):
             command=self._on_model_mode_change,
         ).grid(row=1, column=0, padx=16, pady=4, sticky="w")
 
-        ctk.CTkRadioButton(
-            frame, text="PyTorch Model  (.pt file)",
-            variable=self._model_mode, value="pytorch",
-            font=ctk.CTkFont(size=12),
+        self._rb_model = ctk.CTkRadioButton(
+            frame, text="Keras Model  (.h5 / .keras)",
+            variable=self._model_mode, value="keras",
+            font=ctk.CTkFont(size=13, weight="bold"),
             command=self._on_model_mode_change,
         ).grid(row=1, column=1, padx=8, pady=4, sticky="w")
 
         # File path entry
-        self._model_path_var = ctk.StringVar(value=_read_env("MODEL_PATH", "ai/models/posture_model.pt"))
+        self._model_path_var = ctk.StringVar(value=_read_env("MODEL_PATH", "ai/models/smart_cushion_model.h5"))
         self._model_entry = ctk.CTkEntry(
             frame,
             textvariable=self._model_path_var,
@@ -541,7 +541,7 @@ class FogLauncherApp(ctk.CTk):
 
     def _on_model_mode_change(self) -> None:
         mode = self._model_mode.get()
-        if mode == "pytorch":
+        if mode == "keras":
             self._model_entry.configure(state="normal")
             self._browse_btn.configure(state="normal")
         else:
@@ -550,8 +550,8 @@ class FogLauncherApp(ctk.CTk):
 
     def _on_browse_model(self) -> None:
         path = filedialog.askopenfilename(
-            title="Select PyTorch Model",
-            filetypes=[("PyTorch Model", "*.pt *.pth"), ("All Files", "*")],
+            title="Select Keras Model",
+            filetypes=[("Keras Model", "*.h5 *.keras"), ("All Files", "*")],
             initialdir=str(PROJECT_ROOT / "ai" / "models"),
         )
         if path:
@@ -559,20 +559,20 @@ class FogLauncherApp(ctk.CTk):
 
     def _on_apply_model(self) -> None:
         mode = self._model_mode.get()
-        if mode == "pytorch":
+        if mode == "keras":
             model_path = self._model_path_var.get().strip()
             if not Path(model_path).exists() and not Path(PROJECT_ROOT / model_path).exists():
                 messagebox.showwarning(
                     "Model Not Found",
                     f"The file was not found:\n{model_path}\n\nUsing rule-based mode instead.",
                 )
-                _write_env("MODEL_PATH", "ai/models/posture_model.pt")
+                _write_env("MODEL_PATH", "ai/models/smart_cushion_model.h5")
             else:
                 _write_env("MODEL_PATH", model_path)
             self._log_console(f"MODEL_PATH updated to: {model_path}")
         else:
             # Force model path to a non-existent file → triggers stub fallback
-            _write_env("MODEL_PATH", "ai/models/posture_model.pt")
+            _write_env("MODEL_PATH", "ai/models/dummy_model.h5")
             self._log_console("AI Mode: Rule-based stub (model file will be ignored)")
 
         self._docker.restart_fog_node()
