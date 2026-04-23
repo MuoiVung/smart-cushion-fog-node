@@ -64,3 +64,5 @@ Thumbs.db
 
 # ── Data Exports ──────────────────────────────────────────
 data_exports/
+
+tools/esp32_secrets.h
