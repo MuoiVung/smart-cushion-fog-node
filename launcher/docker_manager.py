@@ -93,6 +93,12 @@ class DockerManager:
         thread = threading.Thread(target=self._do_restart_fog, daemon=True)
         thread.start()
 
+    def rebuild(self) -> None:
+        """Force rebuild of Docker images (non-blocking)."""
+        self._log("🔨 Rebuilding Docker images (this may take 1-2 minutes)…")
+        thread = threading.Thread(target=self._do_rebuild, daemon=True)
+        thread.start()
+
     def is_docker_available(self) -> bool:
         """Return True if docker CLI is installed and responsive."""
         try:
@@ -132,7 +138,7 @@ class DockerManager:
                 self._start_polling()
             else:
                 self._run_compose(
-                    ["up", "-d", "--build"],
+                    ["up", "-d"],
                     stream_log=True,
                 )
                 self._log("✅ Docker services started successfully")
@@ -175,6 +181,17 @@ class DockerManager:
                 self._log("🔄 fog-node restarted")
         except Exception as exc:
             self._log(f"❌ Failed to restart fog-node: {exc}")
+
+    def _do_rebuild(self) -> None:
+        """Run `docker compose build`."""
+        try:
+            if not self._native_mode:
+                self._run_compose(["build"], stream_log=True)
+                self._log("✅ Rebuild complete! You can now Start Services.")
+            else:
+                self._log("ℹ️ Native mode: No rebuild needed.")
+        except Exception as exc:
+            self._log(f"❌ Rebuild failed: {exc}")
 
     def _run_compose(self, args: list[str], stream_log: bool = False) -> None:
         """Execute a docker compose sub-command, optionally streaming output to log."""

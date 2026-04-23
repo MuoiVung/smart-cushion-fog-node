@@ -100,6 +100,12 @@ class Settings(BaseSettings):
     # Legacy alias
     aws_topic_sync:      str  = Field(default="cushion/sync")
     cloud_sync_interval: int  = Field(default=60, ge=10, description="Telemetry sync interval in seconds")
+    
+    # -- Discovery Service (Firebase) -----------------------------------------
+    discovery_firebase_url: str = Field(
+        default="", 
+        description="Firebase Realtime Database URL for IP reporting"
+    )
 
     # ── Computed helpers ─────────────────────────────────────────────────────
     @property

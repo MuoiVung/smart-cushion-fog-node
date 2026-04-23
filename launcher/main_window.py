@@ -25,9 +25,13 @@ import os
 import queue
 import re
 import threading
+import socket
+import requests
+import json
+import time
 from pathlib import Path
 from tkinter import filedialog, messagebox
-from typing import Optional
+from typing import Optional, Dict, Any
 
 import customtkinter as ctk
 
@@ -139,6 +143,10 @@ class FogLauncherApp(ctk.CTk):
             on_log=self._log_queue.put,
         )
 
+        # Discovery configuration (Securely loaded from .env)
+        self.firebase_url = _read_env("DISCOVERY_FIREBASE_URL", "")
+        self.device_id    = _read_env("DEVICE_ID", "cushion-01")
+
         self._current_status: Optional[ServiceStatus] = None
         self._monitor_paused = False
         self._active_channel = CHANNELS[0]["key"]
@@ -146,6 +154,9 @@ class FogLauncherApp(ctk.CTk):
 
         self._build_ui()
         self._start_poll()
+        
+        # Report Host IP to Firebase for discovery
+        self.after(2000, self.report_discovery_ip)
 
         # Shutdown cleanly when the window is closed
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -223,7 +234,14 @@ class FogLauncherApp(ctk.CTk):
             fg_color="#cf222e", hover_color="#a40e26", text_color="#ffffff",
             state="disabled", command=self._on_stop
         )
-        self._stop_btn.grid(row=8, column=0, padx=20, pady=(0, 20), sticky="ew")
+        self._stop_btn.grid(row=8, column=0, padx=20, pady=10, sticky="ew")
+
+        self._rebuild_btn = ctk.CTkButton(
+            sidebar, text="🔨  Rebuild Services", font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color=COLOR["muted"], hover_color="#484f58", text_color="#ffffff",
+            command=self._on_rebuild
+        )
+        self._rebuild_btn.grid(row=9, column=0, padx=20, pady=(0, 20), sticky="ew")
 
     def _build_dashboard_view(self) -> None:
         self._view_dashboard = ctk.CTkFrame(self.main_content_frame, fg_color="transparent")
@@ -513,6 +531,10 @@ class FogLauncherApp(ctk.CTk):
         self._monitors_started = False   # Reset so monitors re-attach on next Start
         self._docker.start()
 
+    def _on_rebuild(self) -> None:
+        if messagebox.askyesno("Confirm Rebuild", "Rebuilding will update libraries and core code. It may take 1-2 minutes. Continue?"):
+            self._docker.rebuild()
+
     def _on_stop(self) -> None:
         self._stop_btn.configure(state="disabled", text="Stopping…")
         self._stop_monitors()
@@ -739,6 +761,37 @@ class FogLauncherApp(ctk.CTk):
         if lines > self.MAX_LOG:
             pnl.delete("1.0", f"{lines - self.MAX_LOG}.0")
         pnl.configure(state="disabled")
+
+    def report_discovery_ip(self):
+        """Finds Host LAN IP and reports it to Firebase."""
+        try:
+            # 1. Get Host LAN IP
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 1))
+            local_ip = s.getsockname()[0]
+            s.close()
+            
+            # 2. Get Public IP
+            public_ip = None
+            try:
+                public_ip = requests.get("https://api.ipify.org", timeout=5).text
+            except:
+                pass
+                
+            # 3. Send to Firebase
+            url = f"{self.firebase_url.rstrip('/')}/devices/{self.device_id}.json"
+            payload = {
+                "local_ip": local_ip,
+                "public_ip": public_ip,
+                "timestamp": int(time.time() * 1000)
+            }
+            requests.put(url, json=payload, timeout=5)
+            self._log_queue.put(f"Discovery: Reported Host IP {local_ip} to Firebase.")
+        except Exception as e:
+            self._log_queue.put(f"Discovery Error: {e}")
+            
+        # Repeat every 5 minutes
+        self.after(300000, self.report_discovery_ip)
 
     def _on_close(self) -> None:
         """Clean up on window close."""

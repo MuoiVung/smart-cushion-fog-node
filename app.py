@@ -27,6 +27,7 @@ from ai.inference_engine import InferenceEngine
 from ai.preprocessor import Preprocessor
 from config.settings import settings
 from core.cloud_sync import CloudSync
+from core.discovery_service import DiscoveryService
 from core.mqtt_client import MQTTClient
 from core.session_manager import SessionManager
 from core.websocket_server import WebSocketServer
