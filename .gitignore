@@ -4,7 +4,8 @@
 # =============================================================
 
 # ── Secrets & Credentials (NEVER commit these) ──────────────
-.env
+# .env (Uncommented for private migration)
+# .env
 *.pem
 *.key
 *.crt
@@ -17,7 +18,7 @@ tools/esp32_2_firmware/esp32_secrets.h
 # ── Mosquitto data (generated at runtime) ─────────────────
 mosquitto/data/
 mosquitto/log/
-mosquitto/config/passwd
+# mosquitto/config/passwd
 
 # ── Trained AI model weights (too large / sensitive) ──────
 ai/models/*.pt
