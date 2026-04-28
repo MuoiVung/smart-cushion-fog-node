@@ -7,6 +7,7 @@ import os
 import datetime
 from pathlib import Path
 from typing import Dict, Any, List
+import tkinter.filedialog as filedialog
 
 import customtkinter as ctk
 import pandas as pd
@@ -100,10 +101,29 @@ class DataCollectorPanel(ctk.CTkFrame):
         self.label_combo.grid(row=2, column=1, padx=16, pady=6, sticky="w")
 
         # Person Present Manual Override
-        ctk.CTkLabel(frame, text="Person Present:", font=ctk.CTkFont(size=13)).grid(row=3, column=0, padx=16, pady=(6, 14), sticky="w")
+        ctk.CTkLabel(frame, text="Person Present:", font=ctk.CTkFont(size=13)).grid(row=3, column=0, padx=16, pady=6, sticky="w")
         self.person_present_var = ctk.BooleanVar(value=True)
         self.person_present_cb = ctk.CTkCheckBox(frame, text="Current session has a person seated", variable=self.person_present_var)
-        self.person_present_cb.grid(row=3, column=1, padx=16, pady=(6, 14), sticky="w")
+        self.person_present_cb.grid(row=3, column=1, padx=16, pady=6, sticky="w")
+
+        # Export Directory
+        ctk.CTkLabel(frame, text="Export Folder:", font=ctk.CTkFont(size=13)).grid(row=4, column=0, padx=16, pady=(6, 14), sticky="w")
+        self.export_dir_var = ctk.StringVar(value=str(EXPORT_DIR.resolve()))
+        
+        dir_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        dir_frame.grid(row=4, column=1, padx=16, pady=(6, 14), sticky="ew")
+        dir_frame.grid_columnconfigure(0, weight=1)
+        
+        self.dir_entry = ctk.CTkEntry(dir_frame, textvariable=self.export_dir_var, state="readonly")
+        self.dir_entry.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        
+        self.btn_browse = ctk.CTkButton(dir_frame, text="Browse...", width=80, command=self._browse_directory)
+        self.btn_browse.grid(row=0, column=1)
+
+    def _browse_directory(self):
+        selected_dir = filedialog.askdirectory(initialdir=self.export_dir_var.get(), title="Select Export Folder")
+        if selected_dir:
+            self.export_dir_var.set(selected_dir)
 
     def _build_columns_panel(self):
         frame = ctk.CTkFrame(self, corner_radius=12)
@@ -209,6 +229,7 @@ class DataCollectorPanel(ctk.CTkFrame):
         self.duration_entry.configure(state="disabled")
         self.label_combo.configure(state="disabled")
         self.person_present_cb.configure(state="disabled")
+        self.btn_browse.configure(state="disabled")
         for cb in self.cb_vars.values(): # checkboxes are handled via var mostly, but visual disabled might be skipped for simplicity
             pass
 
@@ -249,6 +270,7 @@ class DataCollectorPanel(ctk.CTkFrame):
         self.duration_entry.configure(state="normal")
         self.label_combo.configure(state="normal")
         self.person_present_cb.configure(state="normal")
+        self.btn_browse.configure(state="normal")
         
         self.btn_action.configure(text="▶ START COLLECTION", fg_color="#3fb950", hover_color="#2ea043")
         self.progress_bar.set(1.0)
@@ -312,7 +334,10 @@ class DataCollectorPanel(ctk.CTkFrame):
 
             timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"cushion_data_{self.current_label.replace(' ', '_')}_{timestamp_str}.xlsx"
-            filepath = EXPORT_DIR / filename
+            
+            export_path = Path(self.export_dir_var.get())
+            os.makedirs(export_path, exist_ok=True)
+            filepath = export_path / filename
 
             df.to_excel(filepath, index=False)
             return filepath
