@@ -1,4 +1,4 @@
-name: Build Desktop App
+name: Build Desktop App (Windows Only)
 
 on:
   push:
@@ -7,11 +7,7 @@ on:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     
     steps:
     - uses: actions/checkout@v4
@@ -28,17 +24,11 @@ jobs:
         pip install -r requirements.txt
         
     - name: Build with PyInstaller (Windows)
-      if: matrix.os == 'windows-latest'
       run: |
         pyinstaller --noconfirm --onedir --windowed --add-data "launcher/saved_labels.json;launcher" app.py
-        
-    - name: Build with PyInstaller (Mac/Linux)
-      if: matrix.os != 'windows-latest'
-      run: |
-        pyinstaller --noconfirm --onedir --windowed --add-data "launcher/saved_labels.json:launcher" app.py
         
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: smart-cushion-fog-${{ runner.os }}
+        name: smart-cushion-fog-Windows
         path: dist/app
