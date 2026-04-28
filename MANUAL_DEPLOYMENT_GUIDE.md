@@ -1,8 +1,20 @@
 # Manual Deployment & Build Guide
 
-This guide explains how to package the Smart Cushion Fog Node into a standalone executable and how to update the ESP32 edge devices to connect to a new machine.
+## 📋 Migration Checklist (New Machine Setup)
+
+When cloning this repository to a new machine, some essential files are **not** included in Git (due to security or size). You must manually copy these from your original machine:
+
+1.  **`.env`**: Contains your IP configurations, API tokens, and model paths.
+2.  **`ai/models/`**: Ensure your `.h5` and `.pkl` files are present here.
+3.  **`mosquitto/config/passwd`**: (Optional) If you use MQTT authentication.
+4.  **`certs/`**: (Optional) If you have enabled AWS IoT Cloud Sync.
+5.  **`launcher/saved_labels.json`**: If you have saved custom data collection labels.
+
+---
 
 ## 1. Packaging the Fog Node (Desktop App)
+
+This guide explains how to package the Smart Cushion Fog Node into a standalone executable and how to update the ESP32 edge devices to connect to a new machine.
 
 You can build a standalone version of the app that runs without needing Python or Docker installed on the target machine.
 
@@ -20,12 +32,12 @@ Run the following command based on your Operating System:
 
 #### Windows
 ```bash
-pyinstaller --noconfirm --onedir --windowed --add-data "launcher/saved_labels.json;launcher" app.py
+pyinstaller --noconfirm --onedir --windowed --add-data "launcher/saved_labels.json;launcher" --add-data "ai;ai" app.py
 ```
 
 #### macOS / Linux
 ```bash
-pyinstaller --noconfirm --onedir --windowed --add-data "launcher/saved_labels.json:launcher" app.py
+pyinstaller --noconfirm --onedir --windowed --add-data "launcher/saved_labels.json:launcher" --add-data "ai:ai" app.py
 ```
 
 ### Output

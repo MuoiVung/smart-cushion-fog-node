@@ -75,7 +75,8 @@ class DockerManager:
         self._native_mode = not self.is_docker_available()
         self._ngrok_process: Optional[subprocess.Popen] = None
         self._ngrok_url: Optional[str] = None
-        self._native_process: Optional[subprocess.Popen] = None
+        self._native_app_process: Optional[subprocess.Popen] = None
+        self._native_mosquitto_process: Optional[subprocess.Popen] = None
 
     # ── Public API ─────────────────────────────────────────────────────────
 
@@ -125,8 +126,40 @@ class DockerManager:
                 self._start_ngrok(authtoken)
 
             if self._native_mode:
-                self._log("Native mode: Starting python app.py...")
-                self._native_process = subprocess.Popen(
+                self._log("Native mode: Starting python app.py and mosquitto...")
+                
+                # 1. Start Mosquitto
+                try:
+                    # Ensure data dir exists for persistence
+                    (self._root / "mosquitto" / "data").mkdir(parents=True, exist_ok=True)
+                    
+                    conf_path = self._root / "mosquitto" / "config" / "mosquitto.conf"
+                    mosquitto_cmd = ["mosquitto", "-c", str(conf_path)]
+                    
+                    # On Windows, try to find mosquitto if not in path
+                    if sys.platform == "win32":
+                        common_paths = [
+                            os.environ.get("ProgramFiles", "C:\\Program Files") + "\\mosquitto\\mosquitto.exe",
+                            os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)") + "\\mosquitto\\mosquitto.exe"
+                        ]
+                        for p in common_paths:
+                            if os.path.exists(p):
+                                mosquitto_cmd[0] = p
+                                break
+
+                    self._native_mosquitto_process = subprocess.Popen(
+                        mosquitto_cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        cwd=str(self._root)
+                    )
+                    self._log("✅ Local Mosquitto broker started")
+                except Exception as e:
+                    self._log(f"⚠️ Could not start Mosquitto automatically: {e}. Ensure it is running manually.")
+
+                # 2. Start Python App
+                self._native_app_process = subprocess.Popen(
                     [sys.executable, "app.py"],
                     cwd=str(self._root),
                     stdout=subprocess.PIPE,
@@ -135,13 +168,15 @@ class DockerManager:
                 )
                 
                 # Stream the output in a secondary thread
-                def log_native_output():
-                    if self._native_process and self._native_process.stdout:
-                        for line in self._native_process.stdout:
+                def log_output(proc, prefix):
+                    if proc and proc.stdout:
+                        for line in proc.stdout:
                             stripped = line.rstrip()
                             if stripped:
-                                self._log(stripped)
-                threading.Thread(target=log_native_output, daemon=True).start()
+                                self._log(f"[{prefix}] {stripped}")
+                                
+                threading.Thread(target=log_output, args=(self._native_mosquitto_process, "MQTT"), daemon=True).start()
+                threading.Thread(target=log_output, args=(self._native_app_process, "APP"), daemon=True).start()
 
                 self._log("✅ Native Python services started successfully")
                 self._start_polling()
@@ -159,14 +194,15 @@ class DockerManager:
         """Run `docker compose down` or terminate native process."""
         try:
             if self._native_mode:
-                if self._native_process:
-                    self._native_process.terminate()
-                    try:
-                        self._native_process.wait(timeout=3)
-                    except subprocess.TimeoutExpired:
-                        self._native_process.kill()
-                    self._native_process = None
-                self._log("🛑 Native Python services stopped")
+                if self._native_app_process:
+                    self._native_app_process.terminate()
+                    self._native_app_process = None
+                
+                if self._native_mosquitto_process:
+                    self._native_mosquitto_process.terminate()
+                    self._native_mosquitto_process = None
+                    
+                self._log("🛑 Native Python & Mosquitto services stopped")
             else:
                 self._run_compose(["down"], stream_log=True)
                 self._log("🛑 Docker services stopped")
@@ -294,10 +330,17 @@ class DockerManager:
         status = ServiceStatus()
         
         if self._native_mode:
-            # Mosquitto is assumed Running externally if user sets it up natively.
-            status.mosquitto = ServiceState.RUNNING
-            if self._native_process:
-                if self._native_process.poll() is None:
+            # Check Mosquitto
+            if self._native_mosquitto_process and self._native_mosquitto_process.poll() is None:
+                status.mosquitto = ServiceState.RUNNING
+            else:
+                # If we didn't start it, but it's running externally, it might still work
+                # But for status, we check our managed process
+                status.mosquitto = ServiceState.STOPPED
+
+            # Check Fog Node
+            if self._native_app_process:
+                if self._native_app_process.poll() is None:
                     status.fog_node = ServiceState.RUNNING
                 else:
                     status.fog_node = ServiceState.ERROR

@@ -150,8 +150,11 @@ class FogLauncherApp(ctk.CTk):
         self._current_status: Optional[ServiceStatus] = None
         self._discovery_timer: Optional[str]          = None
         self._monitor_paused = False
-        self._active_channel = CHANNELS[0]["key"]
-        self._monitors_started = False   # Guard: start monitors only once per Start
+        self._current_status = ServiceStatus()
+        self._monitors_started = False
+        self._mqtt_connected = False
+        self._ws_connected = False
+        self._success_logged = False   # Guard: start monitors only once per Start
 
         self._build_ui()
         self._start_poll()
@@ -358,7 +361,7 @@ class FogLauncherApp(ctk.CTk):
         ).grid(row=0, column=0, columnspan=4, padx=16, pady=(14, 8), sticky="w")
 
         # Mode selector
-        self._model_mode = ctk.StringVar(value="rule_based")
+        self._model_mode = ctk.StringVar(value="keras")
 
         ctk.CTkRadioButton(
             frame, text="Rule-based Stub  (no model needed)",
@@ -375,7 +378,7 @@ class FogLauncherApp(ctk.CTk):
         ).grid(row=1, column=1, padx=8, pady=4, sticky="w")
 
         # File path entry
-        self._model_path_var = ctk.StringVar(value=_read_env("MODEL_PATH", "ai/models/smart_cushion_model.h5"))
+        self._model_path_var = ctk.StringVar(value=_read_env("MODEL_PATH", "ai/models/posture_9_model.h5"))
         self._model_entry = ctk.CTkEntry(
             frame,
             textvariable=self._model_path_var,
@@ -409,6 +412,9 @@ class FogLauncherApp(ctk.CTk):
             command=self._on_apply_model,
         )
         self._apply_btn.grid(row=2, column=0, columnspan=4, padx=16, pady=(4, 14), sticky="w")
+        
+        # Sync UI state with default mode
+        self._on_model_mode_change()
 
     # ── Data Monitor ──────────────────────────────────────────────────────────
 
@@ -555,7 +561,11 @@ class FogLauncherApp(ctk.CTk):
         self._ws_monitor.stop()
         self._mqtt_monitor.start()
         self._ws_monitor.start()
-        self._log_console("✅ Monitors attached to running services")
+        
+        self._mqtt_connected = False
+        self._ws_connected = False
+        self._success_logged = False
+        # self._log_console("✅ Monitors attached to running services")
 
     def _stop_monitors(self) -> None:
         if not self._monitors_started:
@@ -739,6 +749,16 @@ class FogLauncherApp(ctk.CTk):
         if lines > self.MAX_LOG:
             self._console.delete("1.0", f"{lines - self.MAX_LOG}.0")
         self._console.configure(state="disabled")
+        
+        # Track connection success
+        if "MQTT monitor connected" in text:
+            self._mqtt_connected = True
+        if "WebSocket monitor connected" in text:
+            self._ws_connected = True
+            
+        if self._mqtt_connected and self._ws_connected and not self._success_logged:
+            self._success_logged = True
+            self.after(500, lambda: self._log_console("🚀 SYSTEM READY: All services are up and connected successfully!"))
 
     def _append_monitor(self, msg: MonitorMessage) -> None:
         """Append a MonitorMessage to the correct channel widget."""
