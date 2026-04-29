@@ -231,36 +231,36 @@ class FogApplication:
             )
             session_start_iso = self._session_start.isoformat()
 
-        # Step 7 – Alert logic (only for sitting, bad posture)
-        should_alert = False
-        if person_is_sitting and posture not in GOOD_POSTURES:
-            self._consecutive_bad += 1
-            logger.debug(f"Consecutive bad posture: {self._consecutive_bad}/{settings.incorrect_posture_alert_threshold}")
-            if self._consecutive_bad >= settings.incorrect_posture_alert_threshold:
-                should_alert = True
-                self._consecutive_bad = 0
-        elif person_is_sitting and posture in GOOD_POSTURES:
-            self._consecutive_bad = 0
-            if self._alert_status == AlertStatus.WARNING:
-                self._alert_status = AlertStatus.COOLDOWN
-            elif self._alert_status == AlertStatus.COOLDOWN:
+        # Step 7 – Alert logic (Continuous vibration while bad posture)
+        is_bad_posture = person_is_sitting and (posture not in GOOD_POSTURES)
+        
+        if is_bad_posture:
+            if not self._alert_active:
+                # Start vibration on transition to BAD
+                cmd = ControlCommand(
+                    device_id="esp32-1",
+                    command="vibrate",
+                    active=True,
+                    pattern="continuous",
+                    intensity=settings.vibration_intensity,
+                )
+                _get_mqtt_client().publish_control(cmd)
+                self._alert_active = True
+                self._alert_count += 1
+                self._alert_status = AlertStatus.WARNING
+                logger.info(f"[ALERT] Start continuous vibration – posture: {posture.value}")
+        else:
+            if self._alert_active:
+                # Stop vibration on transition to GOOD or EMPTY
+                cmd = ControlCommand(
+                    device_id="esp32-1",
+                    command="vibrate",
+                    active=False,
+                )
+                _get_mqtt_client().publish_control(cmd)
+                self._alert_active = False
                 self._alert_status = AlertStatus.IDLE
-
-        if should_alert:
-            cmd = ControlCommand(
-                device_id="esp32-1",
-                command="vibrate",
-                active=True,
-                pattern="short_triple",
-                intensity=settings.vibration_intensity,
-            )
-            _get_mqtt_client().publish_control(cmd)
-            self._alert_active = True
-            self._alert_count  += 1
-            self._alert_status  = AlertStatus.WARNING
-            logger.info(f"[ALERT] Vibration sent – posture: {posture.value}")
-        elif person_is_sitting and posture in GOOD_POSTURES:
-            self._alert_active = False
+                logger.info("[ALERT] Stop vibration – posture corrected")
 
         # Step 8 – Broadcast Interface 02 via WebSocket
         broadcast = FogRealtimeUpdate(
