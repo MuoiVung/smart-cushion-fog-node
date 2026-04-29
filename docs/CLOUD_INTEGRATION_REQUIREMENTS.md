@@ -39,3 +39,26 @@ Once configured, the Fog Node will automatically push JSON data to the defined t
 *   [ ] **Event Records:** `session_started`, `session_ended`, and `alert_triggered`.
 *   [ ] **Telemetry Records:** Periodic updates every `CLOUD_SYNC_INTERVAL` seconds (default 60s) while a user is sitting.
 *   [ ] **Summary Records:** An aggregated session summary containing the 9-posture duration breakdown, sent immediately after a session ends.
+
+---
+
+## Appendix: AWS IoT Core Setup Guide (For Cloud Team)
+
+Since this project consists of a single demonstration cushion, the Fog Node is pre-configured with fixed IDs. Please follow these exact steps in the AWS Console to ensure compatibility:
+
+1.  **Create a Thing:**
+    *   Navigate to **AWS IoT Core -> Manage -> All devices -> Things**.
+    *   Click **Create things**.
+    *   Name the thing exactly: `smart-cushion-fog-01` (This matches our `AWS_CLIENT_ID`).
+2.  **Generate Certificates:**
+    *   Select "Auto-generate a new certificate".
+    *   Download the **Device Certificate**, **Private Key**, and **Amazon Root CA 1**. Send these 3 files to the Fog Node deployment team.
+3.  **Create IoT Policy:**
+    *   Create a new policy named `SmartCushionFogPolicy`.
+    *   **Action 1 (`iot:Connect`):** Allow connection where the client ID matches `smart-cushion-fog-01`.
+    *   **Action 2 (`iot:Publish`):** Allow publishing to the topic `cushion/cushion-01/*` (The fixed `DEVICE_ID` is `cushion-01`).
+4.  **Attach Policy:**
+    *   Attach the `SmartCushionFogPolicy` to the certificate generated in Step 2.
+5.  **Provide Endpoint:**
+    *   Go to **AWS IoT Core -> Settings**.
+    *   Copy the "Device data endpoint" and send it to the Fog Node deployment team.
