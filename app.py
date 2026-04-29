@@ -277,7 +277,10 @@ class FogApplication:
         # Step 7 – Alert logic (Continuous vibration while bad posture)
         is_bad_posture = person_is_sitting and (posture not in GOOD_POSTURES)
         
-        if is_bad_posture:
+        # Override if vibration is disabled in settings
+        vibration_allowed = getattr(settings, 'vibration_enabled', True)
+        
+        if is_bad_posture and vibration_allowed:
             now_time = datetime.now(timezone.utc)
             # Re-send every 5s if still bad, or start for the first time
             if (not self._alert_active) or (hasattr(self, '_last_vibrate_time') and (now_time - self._last_vibrate_time).total_seconds() > 5):
@@ -309,11 +312,9 @@ class FogApplication:
                     posture=posture,
                 )
                 asyncio.create_task(self._cloud_sync.publish_event(event))
-                
-                logger.info(f"[ALERT] Start continuous vibration – posture: {posture.value}")
         else:
             if self._alert_active:
-                # Stop vibration on transition to GOOD or EMPTY
+                # Stop vibration on transition to GOOD, EMPTY, or DISABLED
                 cmd = ControlCommand(
                     device_id="esp32-1",
                     command="vibrate",
@@ -322,7 +323,7 @@ class FogApplication:
                 _get_mqtt_client().publish_control(cmd)
                 self._alert_active = False
                 self._alert_status = AlertStatus.IDLE
-                logger.info("[ALERT] Stop vibration – posture corrected")
+                logger.info("[ALERT] Stop vibration – posture corrected or disabled")
 
         # Step 8 – Broadcast Interface 02 via WebSocket
         broadcast = FogRealtimeUpdate(

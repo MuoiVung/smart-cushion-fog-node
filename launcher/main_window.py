@@ -341,12 +341,31 @@ class FogLauncherApp(ctk.CTk):
         # Message counter
         ctk.CTkLabel(frame, text="Messages received:",
                      text_color=COLOR["muted"], font=ctk.CTkFont(size=11)
-                     ).grid(row=3, column=0, columnspan=2, padx=16, pady=(6, 14), sticky="w")
+                     ).grid(row=3, column=0, columnspan=2, padx=16, pady=(6, 2), sticky="w")
         self._lbl_msg_count = ctk.CTkLabel(frame, text="0",
                                             text_color=COLOR["blue"],
                                             font=ctk.CTkFont(size=13, weight="bold"))
         self._lbl_msg_count.grid(row=3, column=2, padx=16)
         self._total_msgs = 0
+
+        # Vibration Toggle
+        self._vibration_enabled_var = ctk.BooleanVar(value=_read_env("VIBRATION_ENABLED", "true").lower() == "true")
+        self._vibration_switch = ctk.CTkSwitch(
+            frame, text="Vibration Alerts",
+            variable=self._vibration_enabled_var,
+            onvalue=True, offvalue=False,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            progress_color=COLOR["green"],
+            command=self._on_toggle_vibration
+        )
+        self._vibration_switch.grid(row=4, column=0, columnspan=3, padx=16, pady=(10, 14), sticky="w")
+
+    def _on_toggle_vibration(self) -> None:
+        val = self._vibration_enabled_var.get()
+        _write_env("VIBRATION_ENABLED", "true" if val else "false")
+        self._log_console(f"Vibration {'enabled' if val else 'disabled'}. Restarting Fog Node to apply...")
+        self._docker.restart_fog_node()
+
 
     # ── AI Model Configuration ────────────────────────────────────────────────
 
