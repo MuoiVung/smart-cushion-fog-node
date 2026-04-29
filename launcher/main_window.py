@@ -64,6 +64,7 @@ CHANNELS = [
     {"key": "fog_to_esp32",  "label": "📤  Fog → ESP32",   "color": COLOR["red"]},
     {"key": "fog_to_cloud",  "label": "☁️   Fog → Cloud",  "color": COLOR["purple"]},
     {"key": "fog_to_app",    "label": "📱  Fog → App",     "color": COLOR["green"]},
+    {"key": "ai_results",    "label": "🧠  AI Predictions", "color": COLOR["yellow"]},
 ]
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -769,6 +770,25 @@ class FogLauncherApp(ctk.CTk):
                 payload_dict = json.loads(msg.payload)
                 self._dashboard.update_data(payload_dict)
                 self._data_collector.process_data(payload_dict)
+                
+                # Update AI Predictions tab with a human-readable summary
+                ai_pnl = self._monitor_panels.get("ai_results")
+                if ai_pnl:
+                    posture = payload_dict.get("posture", "Unknown")
+                    conf = payload_dict.get("confidence", 0.0)
+                    # total_p might be nested in sensors if using the latest schema
+                    sensors = payload_dict.get("sensors", {})
+                    total_p = sum(v for v in sensors.values() if isinstance(v, (int, float)))
+                    
+                    line = f"[{msg.timestamp}]  {posture.upper():<10} | Conf: {conf:.2f} | Pressure: {total_p}\n"
+                    ai_pnl.configure(state="normal")
+                    ai_pnl.insert("end", line)
+                    ai_pnl.see("end")
+                    # Trim
+                    ai_lines = int(ai_pnl.index("end").split(".")[0])
+                    if ai_lines > self.MAX_LOG:
+                        ai_pnl.delete("1.0", f"{ai_lines - self.MAX_LOG}.0")
+                    ai_pnl.configure(state="disabled")
             except Exception:
                 pass
 

@@ -192,6 +192,10 @@ class FogApplication:
 
         # Step 4 – AI inference (11 labels)
         posture, confidence = self._inference.predict(raw_fsr)
+        
+        # Log every prediction for debugging visibility
+        total_p = int(raw_fsr.sum())
+        logger.info(f"[AI] Prediction: {posture.value} (conf: {confidence:.2f}, total_p: {total_p})")
 
         # Step 5 – Derive occupancy from label (no temperature logic)
         occupancy = occupancy_from_label(posture)

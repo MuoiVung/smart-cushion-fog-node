@@ -133,8 +133,8 @@ class DockerManager:
                     # Ensure data dir exists for persistence
                     (self._root / "mosquitto" / "data").mkdir(parents=True, exist_ok=True)
                     
-                    conf_path = self._root / "mosquitto" / "config" / "mosquitto.conf"
-                    mosquitto_cmd = ["mosquitto", "-c", str(conf_path)]
+                    # Use relative path for config to avoid Unicode issues in absolute path
+                    mosquitto_cmd = ["mosquitto", "-c", "mosquitto/config/mosquitto.conf"]
                     
                     # On Windows, try to find mosquitto if not in path
                     if sys.platform == "win32":
@@ -331,12 +331,18 @@ class DockerManager:
         
         if self._native_mode:
             # Check Mosquitto
+            mosquitto_running = False
             if self._native_mosquitto_process and self._native_mosquitto_process.poll() is None:
-                status.mosquitto = ServiceState.RUNNING
+                mosquitto_running = True
             else:
-                # If we didn't start it, but it's running externally, it might still work
-                # But for status, we check our managed process
-                status.mosquitto = ServiceState.STOPPED
+                # If managed process is not running, check if port 1883 is in use by someone else
+                import socket
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(0.5)
+                    if s.connect_ex(('localhost', 1883)) == 0:
+                        mosquitto_running = True
+            
+            status.mosquitto = ServiceState.RUNNING if mosquitto_running else ServiceState.STOPPED
 
             # Check Fog Node
             if self._native_app_process:

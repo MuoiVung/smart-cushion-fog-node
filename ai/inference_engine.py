@@ -122,19 +122,9 @@ class InferenceEngine:
         Returns:
             Tuple of (PostureLabel, confidence) where confidence ∈ [0.0, 1.0].
         """
-        total_pressure = int(raw_sensors.sum())
-
-        # ── Pre-check: empty / object via pressure threshold ────────────────
-        # This acts as a fast gate before the CNN runs.
-        if total_pressure < _EMPTY_THRESHOLD:
-            logger.debug(f"Pre-gate: EMPTY (total_pressure={total_pressure})")
-            return PostureLabel.EMPTY, 0.98
-
-        if total_pressure < _OBJECT_THRESHOLD:
-            logger.debug(f"Pre-gate: OBJECT (total_pressure={total_pressure})")
-            return PostureLabel.OBJECT, 0.80
-
-        # ── Person is seated: run model inference ───────────────────────────
+        # ── Run model inference directly ────────────────────────────────────
+        # (Threshold gates removed as requested – the model handles all states)
+        
         if self._use_stub:
             return self._rule_based_predict(raw_sensors)
 
@@ -161,23 +151,26 @@ class InferenceEngine:
             scaled   = self._scaler.transform(input_df)     # (1, 9) MinMax scaled
             cnn_in   = scaled.reshape(1, 3, 3, 1)           # reshape for Conv2D
 
-            score = float(self._model.predict(cnn_in, verbose=0)[0][0])
+            # Get full prediction array
+            predictions = self._model.predict(cnn_in, verbose=0)[0]
 
             if self._is_binary:
                 # Binary model: score ≥ 0.5 → NUP (correct), < 0.5 → LF (bad)
+                score = float(predictions[0])
                 if score >= 0.5:
                     label      = _BINARY_POS_LABEL
                     confidence = score
                 else:
                     label      = _BINARY_NEG_LABEL
                     confidence = 1.0 - score
+                logger.debug(f"Keras binary prediction: {label.value} (score={score:.4f})")
             else:
-                # Future: multi-class softmax → argmax
-                predicted_idx = int(np.argmax(score))
-                confidence    = float(np.max(score))
+                # Multi-class: find index with highest probability
+                predicted_idx = int(np.argmax(predictions))
+                confidence    = float(predictions[predicted_idx])
                 label         = POSTURE_LABELS_11[predicted_idx]
+                logger.debug(f"Keras multi-class prediction: {label.value} (idx={predicted_idx}, conf={confidence:.3f})")
 
-            logger.debug(f"Keras prediction: {label.value} (confidence={confidence:.3f}, score={score:.4f})")
             return label, round(confidence, 4)
 
         except Exception as exc:

@@ -3,9 +3,10 @@
 # IMPORTANT: This project stores secrets in .env – never commit it!
 # =============================================================
 
-# ── Secrets & Credentials (NEVER commit these) ──────────────
-# .env (Uncommented for private migration)
-# .env
+# ─── Secrets & Credentials (NEVER commit these) ──────────────
+.env
+ngrok.exe
+*.exe
 *.pem
 *.key
 *.crt
