@@ -48,18 +48,32 @@ logger = logging.getLogger(__name__)
 
 # ── Full ordered label list (model output index → PostureLabel) ────────────
 # Update this when a multi-class model is trained:
+# ── 9-posture model (excludes empty and object) ──────────────────────────
+POSTURE_LABELS_9: list[PostureLabel] = [
+    PostureLabel.NUP,     # 0
+    PostureLabel.LF,      # 1
+    PostureLabel.LB,      # 2
+    PostureLabel.LFSR,    # 3
+    PostureLabel.LFSL,    # 4
+    PostureLabel.CRL,     # 5
+    PostureLabel.CLL,     # 6
+    PostureLabel.CRLL,    # 7
+    PostureLabel.CLLL,    # 8
+]
+
+# Full 11-label list (for legacy/future support)
 POSTURE_LABELS_11: list[PostureLabel] = [
-    PostureLabel.EMPTY,   # 0
-    PostureLabel.OBJECT,  # 1
-    PostureLabel.NUP,     # 2
-    PostureLabel.LF,      # 3
-    PostureLabel.LB,      # 4
-    PostureLabel.LFSR,    # 5
-    PostureLabel.LFSL,    # 6
-    PostureLabel.CRL,     # 7
-    PostureLabel.CLL,     # 8
-    PostureLabel.CRLL,    # 9
-    PostureLabel.CLLL,    # 10
+    PostureLabel.EMPTY,
+    PostureLabel.OBJECT,
+    PostureLabel.NUP,
+    PostureLabel.LF,
+    PostureLabel.LB,
+    PostureLabel.LFSR,
+    PostureLabel.LFSL,
+    PostureLabel.CRL,
+    PostureLabel.CLL,
+    PostureLabel.CRLL,
+    PostureLabel.CLLL,
 ]
 
 # ── Current binary model output mapping ───────────────────────────────────
@@ -122,9 +136,13 @@ class InferenceEngine:
         Returns:
             Tuple of (PostureLabel, confidence) where confidence ∈ [0.0, 1.0].
         """
-        # ── Run model inference directly ────────────────────────────────────
-        # (Threshold gates removed as requested – the model handles all states)
-        
+        # ── Step 1: Empty Detection (Heuristic) ─────────────────────────────
+        # If total pressure is very low, it's definitely empty.
+        total_pressure = float(np.sum(raw_sensors))
+        if total_pressure < _EMPTY_THRESHOLD:
+            return PostureLabel.EMPTY, 1.0
+
+        # ── Step 2: Run AI Inference ────────────────────────────────────────
         if self._use_stub:
             return self._rule_based_predict(raw_sensors)
 
@@ -168,7 +186,13 @@ class InferenceEngine:
                 # Multi-class: find index with highest probability
                 predicted_idx = int(np.argmax(predictions))
                 confidence    = float(predictions[predicted_idx])
-                label         = POSTURE_LABELS_11[predicted_idx]
+                
+                # Use appropriate label list based on output count
+                if len(predictions) == 9:
+                    label = POSTURE_LABELS_9[predicted_idx]
+                else:
+                    label = POSTURE_LABELS_11[predicted_idx]
+                
                 logger.debug(f"Keras multi-class prediction: {label.value} (idx={predicted_idx}, conf={confidence:.3f})")
 
             return label, round(confidence, 4)
