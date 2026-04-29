@@ -768,10 +768,18 @@ class FogLauncherApp(ctk.CTk):
         self._console.configure(state="normal")
         self._console.insert("end", line)
         self._console.see("end")
-        # Trim if too long
-        lines = int(self._console.index("end").split(".")[0])
-        if lines > self.MAX_LOG:
-            self._console.delete("1.0", f"{lines - self.MAX_LOG}.0")
+        
+        # Trim if too long (optimized for Windows)
+        if not hasattr(self, "_log_insert_count"):
+            self._log_insert_count = 0
+        self._log_insert_count += 1
+        
+        if self._log_insert_count > 20:
+            self._log_insert_count = 0
+            lines = int(self._console.index("end").split(".")[0])
+            if lines > self.MAX_LOG + 20:
+                self._console.delete("1.0", f"{lines - self.MAX_LOG}.0")
+                
         self._console.configure(state="disabled")
         
         # Track connection success
@@ -815,21 +823,25 @@ class FogLauncherApp(ctk.CTk):
             except Exception:
                 pass
 
+        # Append raw string to monitor text box
         pnl = self._monitor_panels.get(msg.channel)
-        if pnl is None:
-            return
-
-        header = f"── {msg.timestamp}  {msg.topic} ──\n"
-        body   = msg.payload + "\n\n"
-
-        pnl.configure(state="normal")
-        pnl.insert("end", header + body)
-        pnl.see("end")
-        # Trim
-        lines = int(pnl.index("end").split(".")[0])
-        if lines > self.MAX_LOG:
-            pnl.delete("1.0", f"{lines - self.MAX_LOG}.0")
-        pnl.configure(state="disabled")
+        if pnl:
+            pnl.configure(state="normal")
+            pnl.insert("end", f"[{msg.timestamp}]  {msg.payload}\n\n")
+            pnl.see("end")
+            
+            # Optimization: only trim periodically to prevent Windows UI lag
+            if not hasattr(pnl, "_insert_count"):
+                pnl._insert_count = 0
+            pnl._insert_count += 1
+            
+            if pnl._insert_count > 50:
+                pnl._insert_count = 0
+                lines = int(pnl.index("end").split(".")[0])
+                if lines > self.MAX_LOG + 50:
+                    pnl.delete("1.0", f"{lines - self.MAX_LOG}.0")
+            
+            pnl.configure(state="disabled")
 
     def report_discovery_ip(self):
         """Reports connection info to Firebase (Ngrok URL or Local IP)."""
