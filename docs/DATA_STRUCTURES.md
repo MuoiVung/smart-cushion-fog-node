@@ -37,6 +37,40 @@ This document specifies the detailed JSON formats for all communication flows wi
 }
 ```
 
+### 1.2. Event Record
+*   **Trigger:** Sent immediately when an important state change occurs (`session_started`, `session_ended`, or `alert_triggered`).
+*   **Topic:** `cushion/{device_id}/event`
+*   **JSON Format:**
+```json
+{
+  "record_type": "event_record",
+  "record_id": "evt-20260429-1A2B3",
+  "device_id": "cushion-01",
+  "session_id": "sess-20260429-XYZ9",
+  "fog_timestamp_iso": "2026-04-29T15:35:12Z",
+  "event_type": "alert_triggered",   
+  "occupancy_state": "occupied",     
+  "posture": "LF"                    
+}
+```
+
+### 1.3. Telemetry Record
+*   **Trigger:** Sent periodically (e.g., every 60s) while a user is sitting, to provide snapshots for real-time cloud dashboards.
+*   **Topic:** `cushion/{device_id}/telemetry`
+*   **JSON Format:**
+```json
+{
+  "record_type": "telemetry_record",
+  "record_id": "tel-20260429-9F8E7",
+  "device_id": "cushion-01",
+  "session_id": "sess-20260429-XYZ9",
+  "fog_timestamp_iso": "2026-04-29T15:36:00Z",
+  "occupancy_state": "occupied",
+  "posture": "NUP",
+  "alert_active": false
+}
+```
+
 ---
 
 ## 2. Fog Node ↔ ESP32 (Local MQTT)

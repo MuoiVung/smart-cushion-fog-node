@@ -25,7 +25,12 @@ from typing import Optional
 import paho.mqtt.client as mqtt
 
 from config.settings import Settings
-from data.schema import CloudSyncPayload
+from pydantic import BaseModel
+from data.schema import (
+    CloudEventRecord,
+    CloudTelemetryRecord,
+    CloudSummaryRecord,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -99,13 +104,8 @@ class CloudSync:
             self._client.disconnect()
             logger.info("Disconnected from AWS IoT Core")
 
-    async def publish(self, payload: CloudSyncPayload) -> None:
-        """
-        Publish a session summary to AWS IoT Core.
-
-        Args:
-            payload: CloudSyncPayload to serialise and send.
-        """
+    async def _publish_generic(self, payload: BaseModel, topic_template: str) -> None:
+        """Helper to publish any Pydantic model to a given topic template."""
         if not self._settings.cloud_enabled or not self._client or not self._connected:
             logger.debug("Cloud sync skipped (disabled or not connected)")
             return
@@ -114,7 +114,7 @@ class CloudSync:
         loop = asyncio.get_event_loop()
 
         try:
-            topic = self._settings.aws_topic_summary.format(device_id=self._settings.device_id)
+            topic = topic_template.format(device_id=self._settings.device_id)
             result = await loop.run_in_executor(
                 None,
                 lambda: self._client.publish(
@@ -124,15 +124,20 @@ class CloudSync:
                 ),
             )
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                logger.info(
-                    f"Cloud sync published to '{topic}': "
-                    f"correct={payload.correct_seconds}s, "
-                    f"incorrect={payload.incorrect_seconds}s"
-                )
+                logger.info(f"Cloud sync published to '{topic}' [{payload.record_type}]")
             else:
-                logger.error(f"Cloud publish failed (rc={result.rc})")
+                logger.error(f"Cloud publish failed (rc={result.rc}) to {topic}")
         except Exception as exc:
             logger.error(f"Cloud sync error: {exc}", exc_info=True)
+
+    async def publish_event(self, payload: CloudEventRecord) -> None:
+        await self._publish_generic(payload, self._settings.aws_topic_event)
+
+    async def publish_telemetry(self, payload: CloudTelemetryRecord) -> None:
+        await self._publish_generic(payload, self._settings.aws_topic_telemetry)
+
+    async def publish_summary(self, payload: CloudSummaryRecord) -> None:
+        await self._publish_generic(payload, self._settings.aws_topic_summary)
 
     # ── paho Callbacks ─────────────────────────────────────────────────────
 

@@ -21,6 +21,7 @@ import json
 import logging
 import signal
 import sys
+import time
 from datetime import datetime, timezone
 
 from ai.inference_engine import InferenceEngine
@@ -39,6 +40,9 @@ from data.schema import (
     OccupancyState,
     PostureLabel,
     RawMessage,
+    CloudEventRecord,
+    CloudTelemetryRecord,
+    EventType,
     GOOD_POSTURES,
     SITTING_POSTURES,
     occupancy_from_label,
@@ -70,10 +74,7 @@ class FogApplication:
         # ── Components ──────────────────────────────────────────────────────
         self._ws_server       = WebSocketServer(settings)
         self._cloud_sync      = CloudSync(settings)
-        self._session_manager = SessionManager(
-            window_seconds=settings.cloud_sync_interval,
-            incorrect_alert_threshold=settings.incorrect_posture_alert_threshold,
-        )
+        self._session_manager = SessionManager()
         self._preprocessor = Preprocessor()   # no parameters needed anymore
         self._inference = InferenceEngine(
             model_path  = settings.model_path,
@@ -146,8 +147,17 @@ class FogApplication:
             await asyncio.sleep(settings.cloud_sync_interval)
             if not self._running:
                 break
-            sync_payload = self._session_manager.get_sync_payload(settings.device_id)
-            await self._cloud_sync.publish(sync_payload)
+            
+            if self._session_start is not None and self._session_id:
+                telemetry = CloudTelemetryRecord(
+                    device_id=settings.device_id,
+                    session_id=self._session_id,
+                    fog_timestamp_iso=datetime.now(timezone.utc).isoformat(),
+                    occupancy_state=OccupancyState.OCCUPIED,
+                    posture=PostureLabel.NUP, # We just use NUP as a placeholder if we don't store current posture, or we can use it from self._current_sensors
+                    alert_active=self._alert_active,
+                )
+                await self._cloud_sync.publish_telemetry(telemetry)
 
     async def _shutdown_watcher(self) -> None:
         while self._running:
@@ -202,19 +212,52 @@ class FogApplication:
 
         # Step 6 – Session tracking
         person_is_sitting = posture in SITTING_POSTURES
+        current_ts = time.time()
 
-        if person_is_sitting and self._session_start is None:
-            # Session started
-            self._session_start   = datetime.now(timezone.utc)
-            self._session_id      = FogRealtimeUpdate().session_id
-            self._alert_count     = 0
-            self._consecutive_bad = 0
-            self._alert_status    = AlertStatus.IDLE
-            self._alert_active    = False
-            logger.info(f"Session started: {self._session_id}")
+        if person_is_sitting:
+            if self._session_start is None:
+                # Session started
+                self._session_start   = datetime.now(timezone.utc)
+                self._session_id      = FogRealtimeUpdate().session_id
+                self._alert_count     = 0
+                self._consecutive_bad = 0
+                self._alert_status    = AlertStatus.IDLE
+                self._alert_active    = False
+                self._session_manager.start_session(self._session_id, self._session_start, current_ts)
+                logger.info(f"Session started: {self._session_id}")
+                
+                # Publish Event
+                event = CloudEventRecord(
+                    device_id=settings.device_id,
+                    session_id=self._session_id,
+                    fog_timestamp_iso=datetime.now(timezone.utc).isoformat(),
+                    event_type=EventType.SESSION_STARTED,
+                    occupancy_state=occupancy,
+                    posture=posture,
+                )
+                asyncio.create_task(self._cloud_sync.publish_event(event))
+
+            self._session_manager.add_reading(posture, current_ts)
 
         if not person_is_sitting and self._session_start is not None:
             # Session ended
+            end_time_iso = datetime.now(timezone.utc).isoformat()
+            
+            # Publish Event
+            event = CloudEventRecord(
+                device_id=settings.device_id,
+                session_id=self._session_id,
+                fog_timestamp_iso=end_time_iso,
+                event_type=EventType.SESSION_ENDED,
+                occupancy_state=occupancy,
+                posture=posture,
+            )
+            asyncio.create_task(self._cloud_sync.publish_event(event))
+            
+            # Publish Summary
+            summary = self._session_manager.get_summary(settings.device_id, end_time_iso, self._alert_count)
+            asyncio.create_task(self._cloud_sync.publish_summary(summary))
+            
             logger.info(f"Session ended: {self._session_id}")
             self._session_start   = None
             self._session_id      = ""
@@ -248,6 +291,18 @@ class FogApplication:
                 self._alert_active = True
                 self._alert_count += 1
                 self._alert_status = AlertStatus.WARNING
+                
+                # Publish Event
+                event = CloudEventRecord(
+                    device_id=settings.device_id,
+                    session_id=self._session_id,
+                    fog_timestamp_iso=datetime.now(timezone.utc).isoformat(),
+                    event_type=EventType.ALERT_TRIGGERED,
+                    occupancy_state=occupancy,
+                    posture=posture,
+                )
+                asyncio.create_task(self._cloud_sync.publish_event(event))
+                
                 logger.info(f"[ALERT] Start continuous vibration – posture: {posture.value}")
         else:
             if self._alert_active:
