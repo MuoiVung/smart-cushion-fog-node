@@ -77,6 +77,18 @@ class SessionManager:
             if posture not in GOOD_POSTURES:
                 self._poor_posture_duration_sec += duration
 
+    def get_poor_posture_duration_sec(self) -> int:
+        return int(self._poor_posture_duration_sec)
+
+    def get_good_posture_pct(self) -> int:
+        if self._total_sitting_duration_sec <= 0:
+            return 100
+        good_sec = self._total_sitting_duration_sec - self._poor_posture_duration_sec
+        return int((good_sec / self._total_sitting_duration_sec) * 100)
+
+    def get_posture_distribution(self) -> dict[str, int]:
+        return {label.value: int(sec) for label, sec in self._durations.items()}
+
     def get_summary(self, device_id: str, end_time_iso: str, alert_count: int) -> CloudSummaryRecord:
         """
         Build a CloudSummaryRecord from the tracked statistics.

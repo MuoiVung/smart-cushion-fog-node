@@ -349,7 +349,7 @@ class FogLauncherApp(ctk.CTk):
         self._total_msgs = 0
 
         # Vibration Toggle (Always starts as OFF by default)
-        self._vibration_enabled_var = ctk.BooleanVar(value=False)
+        self._vibration_enabled_var = ctk.BooleanVar(value=True)
         self._vibration_switch = ctk.CTkSwitch(
             frame, text="Vibration Alerts",
             variable=self._vibration_enabled_var,

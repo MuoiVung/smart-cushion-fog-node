@@ -46,6 +46,7 @@ from data.schema import (
     GOOD_POSTURES,
     SITTING_POSTURES,
     occupancy_from_label,
+    generate_session_id,
 )
 from utils.logger import setup_logging
 
@@ -71,8 +72,8 @@ class FogApplication:
         self._alert_active:     bool             = False
         self._consecutive_bad:  int              = 0   # consecutive bad posture readings
         
-        # Runtime Config (Always starts as False by default)
-        self._vibration_enabled: bool = False
+        # Runtime Config (Always starts as True by default)
+        self._vibration_enabled: bool = True
 
         # ── Components ──────────────────────────────────────────────────────
         self._ws_server       = WebSocketServer(settings)
@@ -247,7 +248,7 @@ class FogApplication:
             if self._session_start is None:
                 # Session started
                 self._session_start   = datetime.now(timezone.utc)
-                self._session_id      = _new_session_id()  # Use the helper from schema
+                self._session_id      = generate_session_id()
                 self._alert_count     = 0
                 self._consecutive_bad = 0
                 self._alert_status    = AlertStatus.IDLE
@@ -372,6 +373,9 @@ class FogApplication:
             alert_status=self._alert_status,
             alert_count=self._alert_count,
             session_duration_sec=session_duration_sec,
+            poor_posture_duration_sec=self._session_manager.get_poor_posture_duration_sec(),
+            good_posture_pct=self._session_manager.get_good_posture_pct(),
+            posture_distribution=self._session_manager.get_posture_distribution(),
             sensors_heatmap_pct=sensors.as_heatmap_pct(),
             sensors=sensors.model_dump(),
         )

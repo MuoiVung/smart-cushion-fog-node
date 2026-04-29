@@ -3,7 +3,7 @@
 
 # ── Listener ──────────────────────────────────────────────────────────────
 # Standard MQTT port (inside the Docker network)
-listener 1883 0.0.0.0
+listener 1883
 
 # ── Security ──────────────────────────────────────────────────────────────
 # Allow anonymous connections for local development (no password needed).

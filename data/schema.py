@@ -185,7 +185,7 @@ class ControlCommand(BaseModel):
 # Fog → Local App  (WebSocket)  — Interface 02
 # ---------------------------------------------------------------------------
 
-def _new_session_id() -> str:
+def generate_session_id() -> str:
     now = datetime.now(timezone.utc)
     return f"sess-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
 
@@ -198,7 +198,7 @@ class FogRealtimeUpdate(BaseModel):
     """
     record_type:            str            = "realtime_update"
     device_id:              str            = Field(default="cushion-01")
-    session_id:             str            = Field(default_factory=_new_session_id)
+    session_id:             str            = Field(default_factory=generate_session_id)
     session_start_time_iso: str            = Field(default="")
     occupancy_state:        OccupancyState = OccupancyState.EMPTY
     posture:                PostureLabel   = PostureLabel.EMPTY
@@ -207,6 +207,9 @@ class FogRealtimeUpdate(BaseModel):
     alert_status:           AlertStatus    = AlertStatus.IDLE
     alert_count:            int            = Field(default=0, ge=0)
     session_duration_sec:   int            = Field(default=0, ge=0)
+    poor_posture_duration_sec: int          = Field(default=0, ge=0)
+    good_posture_pct:       int            = Field(default=0, ge=0, le=100)
+    posture_distribution:   dict[str, int] = Field(default_factory=dict)
     sensors_heatmap_pct:    list[float]    = Field(default_factory=lambda: [0.0] * 9)
     sensors:                dict           = Field(default_factory=dict)
 
