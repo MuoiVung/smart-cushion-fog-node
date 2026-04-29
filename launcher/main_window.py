@@ -75,7 +75,7 @@ def _read_env(key: str, default: str = "") -> str:
     env_path = PROJECT_ROOT / ".env"
     if not env_path.exists():
         return default
-    for line in env_path.read_text().splitlines():
+    for line in env_path.read_text(encoding="utf-8").splitlines():
         if line.startswith(f"{key}="):
             return line.split("=", 1)[1].strip().strip('"').strip("'")
     return default
@@ -86,7 +86,7 @@ def _write_env(key: str, value: str) -> None:
     env_path = PROJECT_ROOT / ".env"
     if not env_path.exists():
         return
-    lines  = env_path.read_text().splitlines()
+    lines  = env_path.read_text(encoding="utf-8").splitlines()
     new    = []
     found  = False
     for line in lines:
@@ -97,7 +97,7 @@ def _write_env(key: str, value: str) -> None:
             new.append(line)
     if not found:
         new.append(f"{key}={value}")
-    env_path.write_text("\n".join(new) + "\n")
+    env_path.write_text("\n".join(new) + "\n", encoding="utf-8")
 
 
 # =============================================================================
