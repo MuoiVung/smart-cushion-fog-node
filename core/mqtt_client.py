@@ -146,7 +146,9 @@ class MQTTClient:
             self._reconnect_delay = _MIN_BACKOFF
             # Subscribe to raw sensor topic
             client.subscribe(self._settings.mqtt_topic_raw, qos=0)
-            logger.info(f"Subscribed to topic: {self._settings.mqtt_topic_raw}")
+            # Subscribe to runtime config topic
+            client.subscribe("cushion/fog/config", qos=1)
+            logger.info(f"Subscribed to: {self._settings.mqtt_topic_raw} and cushion/fog/config")
         else:
             logger.error(f"MQTT connection failed (rc={rc}): {mqtt.connack_string(rc)}")
 
@@ -183,7 +185,7 @@ class MQTTClient:
             f"({len(message.payload)} bytes)"
         )
         asyncio.run_coroutine_threadsafe(
-            self._queue.put(message.payload),
+            self._queue.put((message.topic, message.payload)),
             self._loop,
         )
 

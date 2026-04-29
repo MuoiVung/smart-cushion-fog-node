@@ -95,6 +95,15 @@ class MQTTMonitor:
             self._connected = False
         self._log("MQTT monitor stopped")
 
+    def publish_config(self, key: str, value: any) -> None:
+        """Publish a configuration update to the Fog Node."""
+        if self._client and self._connected:
+            payload = json.dumps({key: value})
+            self._client.publish("cushion/fog/config", payload, qos=1)
+            self._log(f"Published config update: {key}={value}")
+        else:
+            self._log(f"⚠️ Cannot publish config: MQTT monitor not connected")
+
     # ── Connection loop ────────────────────────────────────────────────────
 
     def _connect_loop(self) -> None:

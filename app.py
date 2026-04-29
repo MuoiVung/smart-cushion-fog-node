@@ -70,6 +70,9 @@ class FogApplication:
         self._alert_status:     AlertStatus      = AlertStatus.IDLE
         self._alert_active:     bool             = False
         self._consecutive_bad:  int              = 0   # consecutive bad posture readings
+        
+        # Runtime Config (can be updated via MQTT without restart)
+        self._vibration_enabled: bool = getattr(settings, 'vibration_enabled', True)
 
         # ── Components ──────────────────────────────────────────────────────
         self._ws_server       = WebSocketServer(settings)
@@ -125,15 +128,21 @@ class FogApplication:
         logger.info("Message processor started")
         while self._running:
             try:
-                payload: bytes = await asyncio.wait_for(
+                # MQTTClient now puts (topic, payload) into the queue
+                msg_tuple = await asyncio.wait_for(
                     self._message_queue.get(), timeout=1.0
                 )
+                topic, payload = msg_tuple
             except asyncio.TimeoutError:
                 continue
+            
             try:
-                await self._process_sensor_data(payload)
+                if topic == settings.mqtt_topic_raw:
+                    await self._process_sensor_data(payload)
+                elif topic == "cushion/fog/config":
+                    await self._process_config_data(payload)
             except Exception:
-                logger.exception("Unhandled error in message processor")
+                logger.exception(f"Error processing message on topic {topic}")
             finally:
                 self._message_queue.task_done()
 
@@ -167,6 +176,26 @@ class FogApplication:
                 task.cancel()
 
     # ── Core pipeline ──────────────────────────────────────────────────────
+
+    async def _process_config_data(self, payload: bytes) -> None:
+        """Handle runtime configuration updates."""
+        try:
+            data = json.loads(payload.decode())
+            if "vibration_enabled" in data:
+                new_val = bool(data["vibration_enabled"])
+                self._vibration_enabled = new_val
+                logger.info(f"[CONFIG] Vibration enabled set to: {new_val}")
+                
+                # If disabled while active, stop vibration immediately
+                if not new_val and self._alert_active:
+                    cmd = ControlCommand(device_id="esp32-1", command="vibrate", active=False)
+                    if _mqtt_ref:
+                        _mqtt_ref.publish_control(cmd)
+                    self._alert_active = False
+                    self._alert_status = AlertStatus.IDLE
+                    logger.info("[CONFIG] Vibration disabled - force stopping active alert")
+        except Exception as e:
+            logger.error(f"Failed to parse config message: {e}")
 
     async def _process_sensor_data(self, raw_bytes: bytes) -> None:
         """
@@ -284,10 +313,8 @@ class FogApplication:
         # Step 7 – Alert logic (Continuous vibration while bad posture)
         is_bad_posture = person_is_sitting and (posture not in GOOD_POSTURES)
         
-        # Override if vibration is disabled in settings
-        vibration_allowed = getattr(settings, 'vibration_enabled', True)
-        
-        if is_bad_posture and vibration_allowed:
+        # Override if vibration is disabled (runtime flag)
+        if is_bad_posture and self._vibration_enabled:
             now_time = datetime.now(timezone.utc)
             # Re-send every 5s if still bad, or start for the first time
             if (not self._alert_active) or (hasattr(self, '_last_vibrate_time') and (now_time - self._last_vibrate_time).total_seconds() > 5):
@@ -298,7 +325,7 @@ class FogApplication:
                     pattern="continuous",
                     intensity=settings.vibration_intensity,
                 )
-                _get_mqtt_client().publish_control(cmd)
+                _mqtt_ref.publish_control(cmd)
                 self._last_vibrate_time = now_time
                 
                 if not self._alert_active:
@@ -327,7 +354,7 @@ class FogApplication:
                     command="vibrate",
                     active=False,
                 )
-                _get_mqtt_client().publish_control(cmd)
+                _mqtt_ref.publish_control(cmd)
                 self._alert_active = False
                 self._alert_status = AlertStatus.IDLE
                 logger.info("[ALERT] Stop vibration – posture corrected or disabled")
