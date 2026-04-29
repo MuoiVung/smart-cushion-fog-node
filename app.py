@@ -71,8 +71,8 @@ class FogApplication:
         self._alert_active:     bool             = False
         self._consecutive_bad:  int              = 0   # consecutive bad posture readings
         
-        # Runtime Config (can be updated via MQTT without restart)
-        self._vibration_enabled: bool = getattr(settings, 'vibration_enabled', True)
+        # Runtime Config (Always starts as False as requested)
+        self._vibration_enabled: bool = False
 
         # ── Components ──────────────────────────────────────────────────────
         self._ws_server       = WebSocketServer(settings)

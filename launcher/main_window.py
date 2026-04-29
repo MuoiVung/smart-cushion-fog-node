@@ -348,8 +348,8 @@ class FogLauncherApp(ctk.CTk):
         self._lbl_msg_count.grid(row=3, column=2, padx=16)
         self._total_msgs = 0
 
-        # Vibration Toggle
-        self._vibration_enabled_var = ctk.BooleanVar(value=_read_env("VIBRATION_ENABLED", "true").lower() == "true")
+        # Vibration Toggle (Always starts as False/Off by default)
+        self._vibration_enabled_var = ctk.BooleanVar(value=False)
         self._vibration_switch = ctk.CTkSwitch(
             frame, text="Vibration Alerts",
             variable=self._vibration_enabled_var,
@@ -362,15 +362,13 @@ class FogLauncherApp(ctk.CTk):
 
     def _on_toggle_vibration(self) -> None:
         val = self._vibration_enabled_var.get()
-        # 1. Update .env for persistence
-        _write_env("VIBRATION_ENABLED", "true" if val else "false")
         
-        # 2. Send instantaneous command via MQTT
+        # 1. Send instantaneous command via MQTT
         if self._mqtt_connected:
             self._mqtt_monitor.publish_config("vibration_enabled", val)
             self._log_console(f"Vibration {'enabled' if val else 'disabled'} (Instant update sent)")
         else:
-            self._log_console(f"Vibration saved to .env, but Fog Node is not connected.")
+            self._log_console(f"Vibration toggle changed, but Fog Node is not connected.")
 
 
     # ── AI Model Configuration ────────────────────────────────────────────────
