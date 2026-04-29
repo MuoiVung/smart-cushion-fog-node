@@ -1,31 +1,42 @@
 # ErgoVita - Smart Cushion Fog Node
 
-The "Brain" of the Smart Cushion system. This node aggregates raw sensor data from ESP32 edge devices, performs AI-based posture classification using a Keras CNN model, and broadcasts results to the user-facing app.
+The "Brain" of the Smart Cushion system. This node aggregates raw sensor data from ESP32 edge devices, performs AI-based posture classification using a Keras CNN model, and broadcasts results to the user-facing app and cloud.
 
-## 🧠 AI Features
--   **11-Class Classifier**: Recognizes 9 human sitting postures + `EMPTY` (cushion empty) + `OBJECT` (non-human object).
--   **Keras CNN 2D**: Processes 3x3 FSR pressure matrix.
--   **No Temperature Relying**: Occupancy detection is handled entirely by AI pressure analysis.
+---
 
-## 🚀 Setup
+## 📂 Project Documentation
+
+To keep the repository clean, all technical documentation has been moved to the `docs/` folder:
+
+1.  **[Data Structures & Interfaces](docs/DATA_STRUCTURES.md)**: Detailed JSON formats for Cloud, ESP32, and Web App communication.
+2.  **[System Architecture](docs/system_architecture.md)**: Overall system design, AI label classification, and logic flow.
+3.  **[Manual Deployment Guide](docs/MANUAL_DEPLOYMENT_GUIDE.md)**: How to set up the Fog Node on a new machine.
+4.  **[Windows Installation](docs/WINDOWS_INSTALL.md)**: Specific instructions for Windows users.
+
+---
+
+## 🚀 Quick Start
 
 1.  **Environment**:
     ```bash
     cp .env.example .env
-    # Update MQTT and Model paths if necessary
+    # Update MQTT and Model paths in .env
     ```
 
-2.  **Model Files**:
-    Ensure `smart_cushion_model.h5` and `fsr_scaler.pkl` are located in `ai/models/`.
-
-3.  **Run**:
+2.  **Requirements**:
     ```bash
     pip install -r requirements.txt
-    python app.py
     ```
 
-## 📡 Interfaces
--   **Interface 01 (MQTT)**: Receives raw FSR telemetry from Edge.
--   **Interface 02 (WebSocket)**: Broadcasts real-time posture and heatmap to the Web App.
--   **Interface 03 (AWS IoT)**: Syncs session summaries to the cloud for historical analysis.
--   **Interface 05 (MQTT)**: Sends vibration commands back to the Edge.
+3.  **Run Launcher (UI)**:
+    ```bash
+    python run_launcher.py
+    ```
+
+## 🧠 AI Features
+-   **9-Posture Classifier**: Recognizes 9 human sitting postures (NUP, LF, LB, etc.).
+-   **Smart Empty Detection**: Automatically detects empty cushion state when total sensor pressure < 1000.
+-   **Keras CNN 2D**: Processes a 3x3 FSR pressure matrix for high-accuracy classification.
+
+---
+© 2026 ErgoVita Team
