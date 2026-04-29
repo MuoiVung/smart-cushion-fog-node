@@ -82,6 +82,10 @@ class Settings(BaseSettings):
         default=200, ge=0, le=255,
         description="PWM duty cycle (0–255) for vibration motor intensity",
     )
+    vibration_enabled:                 bool = Field(
+        default=False,
+        description="Globally enable/disable vibration alerts",
+    )
     incorrect_posture_alert_threshold: int = Field(
         default=3,
         description="Trigger vibration after this many consecutive incorrect posture readings",

@@ -71,7 +71,7 @@ class FogApplication:
         self._alert_active:     bool             = False
         self._consecutive_bad:  int              = 0   # consecutive bad posture readings
         
-        # Runtime Config (Always starts as False as requested)
+        # Runtime Config (Always starts as False by default)
         self._vibration_enabled: bool = False
 
         # ── Components ──────────────────────────────────────────────────────
@@ -239,7 +239,7 @@ class FogApplication:
         # Step 5 – Derive occupancy from label (no temperature logic)
         occupancy = occupancy_from_label(posture)
 
-        # Step 6 – Session tracking
+        # Step 6 – Session tracking (Pure AI, no temperature)
         person_is_sitting = posture in SITTING_POSTURES
         current_ts = time.time()
 
@@ -247,7 +247,7 @@ class FogApplication:
             if self._session_start is None:
                 # Session started
                 self._session_start   = datetime.now(timezone.utc)
-                self._session_id      = FogRealtimeUpdate().session_id
+                self._session_id      = _new_session_id()  # Use the helper from schema
                 self._alert_count     = 0
                 self._consecutive_bad = 0
                 self._alert_status    = AlertStatus.IDLE
@@ -310,7 +310,7 @@ class FogApplication:
             )
             session_start_iso = self._session_start.isoformat()
 
-        # Step 7 – Alert logic (Continuous vibration while bad posture)
+        # Step 7 – Alert logic (Pure AI-driven, no temperature check)
         is_bad_posture = person_is_sitting and (posture not in GOOD_POSTURES)
         
         # Override if vibration is disabled (runtime flag)
@@ -323,9 +323,10 @@ class FogApplication:
                     command="vibrate",
                     active=True,
                     pattern="continuous",
-                    intensity=settings.vibration_intensity,
+                    intensity=200, # Default intensity
                 )
-                _mqtt_ref.publish_control(cmd)
+                if _mqtt_ref:
+                    _mqtt_ref.publish_control(cmd)
                 self._last_vibrate_time = now_time
                 
                 if not self._alert_active:
