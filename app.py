@@ -243,6 +243,12 @@ class FogApplication:
             # Session ended
             end_time_iso = datetime.now(timezone.utc).isoformat()
             
+            # Stop vibration immediately if active
+            if self._alert_active:
+                cmd = ControlCommand(device_id="esp32-1", command="vibrate", active=False)
+                _get_mqtt_client().publish_control(cmd)
+                logger.info("[ALERT] Stop vibration – session ended (user stood up)")
+
             # Publish Event
             event = CloudEventRecord(
                 device_id=settings.device_id,
@@ -265,6 +271,7 @@ class FogApplication:
             self._consecutive_bad = 0
             self._alert_status    = AlertStatus.IDLE
             self._alert_active    = False
+
 
         session_duration_sec = 0
         session_start_iso    = ""

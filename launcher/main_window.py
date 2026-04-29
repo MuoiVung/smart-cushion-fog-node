@@ -363,8 +363,14 @@ class FogLauncherApp(ctk.CTk):
     def _on_toggle_vibration(self) -> None:
         val = self._vibration_enabled_var.get()
         _write_env("VIBRATION_ENABLED", "true" if val else "false")
-        self._log_console(f"Vibration {'enabled' if val else 'disabled'}. Restarting Fog Node to apply...")
-        self._docker.restart_fog_node()
+        self._log_console(f"Vibration {'enabled' if val else 'disabled'}. Applying change...")
+        
+        # Run restart in a thread to prevent UI hang
+        def do_restart():
+            self._docker.restart_fog_node()
+            self._log_queue.put("✅ Fog Node restarted with new vibration settings.")
+            
+        threading.Thread(target=do_restart, daemon=True).start()
 
 
     # ── AI Model Configuration ────────────────────────────────────────────────
