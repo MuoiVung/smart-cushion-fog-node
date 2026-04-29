@@ -278,8 +278,9 @@ class FogApplication:
         is_bad_posture = person_is_sitting and (posture not in GOOD_POSTURES)
         
         if is_bad_posture:
-            if not self._alert_active:
-                # Start vibration on transition to BAD
+            now_time = datetime.now(timezone.utc)
+            # Re-send every 5s if still bad, or start for the first time
+            if (not self._alert_active) or (hasattr(self, '_last_vibrate_time') and (now_time - self._last_vibrate_time).total_seconds() > 5):
                 cmd = ControlCommand(
                     device_id="esp32-1",
                     command="vibrate",
@@ -288,9 +289,15 @@ class FogApplication:
                     intensity=settings.vibration_intensity,
                 )
                 _get_mqtt_client().publish_control(cmd)
-                self._alert_active = True
-                self._alert_count += 1
-                self._alert_status = AlertStatus.WARNING
+                self._last_vibrate_time = now_time
+                
+                if not self._alert_active:
+                    self._alert_active = True
+                    self._alert_count += 1
+                    self._alert_status = AlertStatus.WARNING
+                    logger.info(f"[ALERT] Start continuous vibration – posture: {posture.value}")
+                else:
+                    logger.debug("[ALERT] Re-sending vibration command (Keep-alive)")
                 
                 # Publish Event
                 event = CloudEventRecord(
