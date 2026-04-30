@@ -869,7 +869,8 @@ class FogLauncherApp(ctk.CTk):
             # 5. Send to Firebase
             url = f"{self.firebase_url.rstrip('/')}/devices/{self.device_id}.json"
             payload = {
-                "local_ip": display_ip,
+                "local_ip": local_ip,
+                "ngrok_url": ngrok_url if ngrok_url else "",
                 "public_ip": public_ip,
                 "is_ngrok": bool(ngrok_url),
                 "timestamp": int(time.time() * 1000)

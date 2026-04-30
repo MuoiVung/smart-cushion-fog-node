@@ -45,17 +45,22 @@ class DiscoveryService:
         local_ip = self.get_local_ip()
         public_ip = self.get_public_ip()
         
+        # Check for ngrok URL if it's being used as a tunnel
+        import os
+        ngrok_url = os.environ.get("NGROK_URL", "")
+
         url = f"{self.firebase_url}/devices/{self.device_id}.json"
         payload = {
             "local_ip": local_ip,
             "public_ip": public_ip,
+            "ngrok_url": ngrok_url,
             "timestamp": int(time.time() * 1000)
         }
         
         try:
             response = requests.put(url, json=payload, timeout=10)
             if response.status_code == 200:
-                logger.info(f"Discovery: Reported IP {local_ip} to Firebase.")
+                logger.info(f"Discovery: Reported IP {local_ip} (Ngrok: {ngrok_url}) to Firebase.")
             else:
                 logger.error(f"Discovery: Failed to report to Firebase: {response.status_code}")
         except Exception as e:
