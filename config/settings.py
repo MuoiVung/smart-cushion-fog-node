@@ -107,8 +107,15 @@ class Settings(BaseSettings):
     
     # -- Discovery Service (Firebase) -----------------------------------------
     discovery_firebase_url: str = Field(
-        default="", 
+        default="",
         description="Firebase Realtime Database URL for IP reporting"
+    )
+
+    # ── Cloud WebSocket Relay (AWS API Gateway WebSocket) ─────────────────────
+    cloud_ws_url: str = Field(
+        default="",
+        description="AWS API Gateway WebSocket URL (wss://xxx.execute-api.region.amazonaws.com/prod). "
+                    "When set, Fog relays realtime updates to App clients over the internet.",
     )
 
     # ── Computed helpers ─────────────────────────────────────────────────────

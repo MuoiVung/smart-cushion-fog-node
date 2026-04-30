@@ -28,6 +28,7 @@ from ai.inference_engine import InferenceEngine
 from ai.preprocessor import Preprocessor
 from config.settings import settings
 from core.cloud_sync import CloudSync
+from core.cloud_ws_relay import CloudWsRelay
 from core.discovery_service import DiscoveryService
 from core.mqtt_client import MQTTClient
 from core.session_manager import SessionManager
@@ -78,6 +79,7 @@ class FogApplication:
         # ── Components ──────────────────────────────────────────────────────
         self._ws_server       = WebSocketServer(settings)
         self._cloud_sync      = CloudSync(settings)
+        self._cloud_ws_relay  = CloudWsRelay(settings.cloud_ws_url, settings.device_id)
         self._session_manager = SessionManager()
         self._preprocessor = Preprocessor()   # no parameters needed anymore
         self._inference = InferenceEngine(
@@ -107,6 +109,7 @@ class FogApplication:
         mqtt_client.start()
         if settings.cloud_enabled:
             await self._cloud_sync.connect()
+        await self._cloud_ws_relay.start()
 
         try:
             async with asyncio.TaskGroup() as tg:
@@ -119,6 +122,7 @@ class FogApplication:
         finally:
             logger.info("Stopping MQTT client...")
             mqtt_client.stop()
+            await self._cloud_ws_relay.stop()
             if settings.cloud_enabled:
                 await self._cloud_sync.disconnect()
             logger.info("Fog Node stopped cleanly. Goodbye!")
@@ -379,7 +383,9 @@ class FogApplication:
             sensors_heatmap_pct=sensors.as_heatmap_pct(),
             sensors=sensors.model_dump(),
         )
-        await self._ws_server.broadcast(broadcast.model_dump())
+        payload = broadcast.model_dump()
+        await self._ws_server.broadcast(payload)
+        await self._cloud_ws_relay.send(payload)  # relay to AWS WebSocket (no-op if not configured)
 
         logger.debug(
             f"Pipeline done – posture={posture.value}, occupancy={occupancy.value}, "
