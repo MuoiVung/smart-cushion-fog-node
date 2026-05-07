@@ -20,7 +20,7 @@ import asyncio
 import json
 import logging
 import ssl
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 import paho.mqtt.client as mqtt
 
@@ -31,6 +31,9 @@ from data.schema import (
     CloudTelemetryRecord,
     CloudSummaryRecord,
 )
+
+if TYPE_CHECKING:
+    from core.local_db import LocalDB
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +56,16 @@ class CloudSync:
         await sync.disconnect()
     """
 
-    def __init__(self, settings: Settings) -> None:
-        self._settings = settings
+    def __init__(self, settings: Settings, local_db: Optional["LocalDB"] = None) -> None:
+        self._settings  = settings
+        self._local_db  = local_db
         self._client: Optional[mqtt.Client] = None
         self._connected = False
+
+    @property
+    def is_connected(self) -> bool:
+        """True when the AWS IoT Core MQTT connection is live."""
+        return self._connected
 
     # ── Public API ─────────────────────────────────────────────────────────
 
@@ -105,30 +114,41 @@ class CloudSync:
             logger.info("Disconnected from AWS IoT Core")
 
     async def _publish_generic(self, payload: BaseModel, topic_template: str) -> None:
-        """Helper to publish any Pydantic model to a given topic template."""
+        """Publish a Pydantic payload; queue locally if cloud is unavailable."""
+        topic       = topic_template.format(device_id=self._settings.device_id)
+        message     = payload.model_dump_json()
+        record_type = getattr(payload, "record_type", "unknown")
+
+        # ── Not connected: queue for later ───────────────────────────────
         if not self._settings.cloud_enabled or not self._client or not self._connected:
-            logger.debug("Cloud sync skipped (disabled or not connected)")
+            if self._settings.cloud_enabled and self._local_db:
+                self._local_db.enqueue(record_type, topic, message)
+                count = self._local_db.get_pending_count()
+                logger.warning(
+                    f"[CloudQueue] Cloud offline – {record_type} queued "
+                    f"({count} pending total)"
+                )
+            else:
+                logger.debug("Cloud sync skipped (disabled or not connected)")
             return
 
-        message = payload.model_dump_json()
+        # ── Try to publish ────────────────────────────────────────────────
         loop = asyncio.get_event_loop()
-
         try:
-            topic = topic_template.format(device_id=self._settings.device_id)
             result = await loop.run_in_executor(
                 None,
-                lambda: self._client.publish(
-                    topic=topic,
-                    payload=message,
-                    qos=1,
-                ),
+                lambda: self._client.publish(topic=topic, payload=message, qos=1),
             )
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                logger.info(f"Cloud sync published to '{topic}' [{payload.record_type}]")
+                logger.info(f"Cloud sync published to '{topic}' [{record_type}]")
             else:
-                logger.error(f"Cloud publish failed (rc={result.rc}) to {topic}")
+                logger.error(f"Cloud publish failed (rc={result.rc}) → {topic}")
+                if self._local_db:
+                    self._local_db.enqueue(record_type, topic, message)
         except Exception as exc:
             logger.error(f"Cloud sync error: {exc}", exc_info=True)
+            if self._local_db:
+                self._local_db.enqueue(record_type, topic, message)
 
     async def publish_event(self, payload: CloudEventRecord) -> None:
         await self._publish_generic(payload, self._settings.aws_topic_event)
@@ -138,6 +158,49 @@ class CloudSync:
 
     async def publish_summary(self, payload: CloudSummaryRecord) -> None:
         await self._publish_generic(payload, self._settings.aws_topic_summary)
+
+    async def drain_queue(self) -> tuple[int, int]:
+        """
+        Retry all pending events stored in the local DB queue.
+
+        Called automatically by the retry loop in app.py when the cloud
+        connection is re-established.
+
+        Returns:
+            Tuple of (sent_count, failed_count).
+        """
+        if not self._local_db or not self._connected:
+            return 0, 0
+
+        pending = self._local_db.get_pending(limit=100)
+        if not pending:
+            return 0, 0
+
+        sent, failed = 0, 0
+        loop = asyncio.get_event_loop()
+        logger.info(f"[CloudQueue] Draining {len(pending)} pending events…")
+
+        for row in pending:
+            try:
+                result = await loop.run_in_executor(
+                    None,
+                    lambda r=row: self._client.publish(
+                        topic=r["topic"], payload=r["payload"], qos=1
+                    ),
+                )
+                if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                    self._local_db.mark_sent(row["id"])
+                    sent += 1
+                else:
+                    self._local_db.increment_retry(row["id"])
+                    failed += 1
+            except Exception as exc:
+                logger.error(f"[CloudQueue] Retry failed id={row['id']}: {exc}")
+                self._local_db.increment_retry(row["id"])
+                failed += 1
+
+        logger.info(f"[CloudQueue] Drain complete: {sent} sent, {failed} failed")
+        return sent, failed
 
     # ── paho Callbacks ─────────────────────────────────────────────────────
 

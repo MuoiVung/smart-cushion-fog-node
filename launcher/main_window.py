@@ -40,6 +40,7 @@ from launcher.mqtt_monitor import MQTTMonitor, MonitorMessage
 from launcher.ws_monitor import WebSocketMonitor
 from launcher.dashboard_panel import DashboardPanel
 from launcher.data_collector_panel import DataCollectorPanel
+from core.local_db import LocalDB
 
 # ── Theme ─────────────────────────────────────────────────────────────────
 ctk.set_appearance_mode("dark")
@@ -157,6 +158,9 @@ class FogLauncherApp(ctk.CTk):
         self._ws_connected = False
         self._success_logged = False   # Guard: start monitors only once per Start
 
+        # Local DB (Config Store + Offline Cloud Queue)
+        self._db = LocalDB()
+
         self._build_ui()
         self._start_poll()
         
@@ -262,14 +266,14 @@ class FogLauncherApp(ctk.CTk):
         self._view_config = ctk.CTkFrame(self.main_content_frame, fg_color="transparent")
         self._view_config.grid(row=0, column=0, sticky="nsew")
         self._view_config.grid_columnconfigure(0, weight=1)
-        
-        # System status panel
+
         row1 = ctk.CTkFrame(self._view_config, fg_color="transparent")
         row1.grid(row=0, column=0, sticky="ew", padx=16, pady=(12, 0))
         row1.grid_columnconfigure(0, weight=1)
         self._build_status_panel(row1)
-        
+
         self._build_model_panel(self._view_config)
+        self._build_cloud_queue_panel(self._view_config)
 
     def _build_monitor_view(self) -> None:
         self._view_monitor = ctk.CTkFrame(self.main_content_frame, fg_color="transparent")
@@ -407,7 +411,9 @@ class FogLauncherApp(ctk.CTk):
             font=ctk.CTkFont(size=11), text_color=COLOR["muted"],
         ).grid(row=2, column=0, padx=16, pady=4, sticky="e")
 
-        self._model_path_var = ctk.StringVar(value=_read_env("MODEL_PATH", "ai/models/posture_9_model.h5"))
+        self._model_path_var = ctk.StringVar(
+            value=self._db.get_config("model_path", _read_env("MODEL_PATH", "ai/models/posture_9_model.h5"))
+        )
         self._model_entry = ctk.CTkEntry(
             frame,
             textvariable=self._model_path_var,
@@ -433,7 +439,9 @@ class FogLauncherApp(ctk.CTk):
             font=ctk.CTkFont(size=11), text_color=COLOR["muted"],
         ).grid(row=3, column=0, padx=16, pady=4, sticky="e")
 
-        self._scaler_path_var = ctk.StringVar(value=_read_env("SCALER_PATH", "ai/models/fsr_scaler_9.pkl"))
+        self._scaler_path_var = ctk.StringVar(
+            value=self._db.get_config("scaler_path", _read_env("SCALER_PATH", "ai/models/fsr_scaler_9.pkl"))
+        )
         self._scaler_entry = ctk.CTkEntry(
             frame,
             textvariable=self._scaler_path_var,
@@ -480,7 +488,109 @@ class FogLauncherApp(ctk.CTk):
 
     # ── Data Monitor ──────────────────────────────────────────────────────────
 
+    def _build_cloud_queue_panel(self, parent) -> None:
+        """Cloud Queue management panel shown in Config & Control view."""
+        frame = ctk.CTkFrame(parent, fg_color=COLOR["surface"], corner_radius=12)
+        frame.grid(row=2, column=0, sticky="ew", padx=16, pady=(12, 16))
+        frame.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(
+            frame, text="OFFLINE CLOUD QUEUE",
+            font=ctk.CTkFont(size=10, weight="bold"),
+            text_color=COLOR["muted"],
+        ).grid(row=0, column=0, columnspan=4, padx=16, pady=(14, 6), sticky="w")
+
+        # ── Status label ─────────────────────────────────────────────────
+        self._queue_status_lbl = ctk.CTkLabel(
+            frame, text="● 0 events pending",
+            font=ctk.CTkFont(size=12),
+            text_color=COLOR["green"],
+        )
+        self._queue_status_lbl.grid(row=1, column=0, columnspan=4, padx=16, pady=(0, 6), sticky="w")
+
+        # ── Retention row ─────────────────────────────────────────────────
+        ctk.CTkLabel(
+            frame, text="Auto-delete after:",
+            font=ctk.CTkFont(size=12), text_color=COLOR["text"],
+        ).grid(row=2, column=0, padx=16, pady=4, sticky="w")
+
+        default_days = self._db.get_config("cloud_queue_retention_days", "7")
+        self._retention_var = ctk.StringVar(value=default_days)
+        ctk.CTkEntry(
+            frame, textvariable=self._retention_var,
+            width=60, height=30,
+            font=ctk.CTkFont(size=12),
+        ).grid(row=2, column=1, padx=(4, 4), pady=4, sticky="w")
+
+        ctk.CTkLabel(
+            frame, text="days",
+            font=ctk.CTkFont(size=12), text_color=COLOR["muted"],
+        ).grid(row=2, column=2, padx=(0, 8), pady=4, sticky="w")
+
+        ctk.CTkButton(
+            frame, text="Save", width=64, height=30,
+            fg_color=COLOR["surface"], border_width=1,
+            border_color=COLOR["blue"], text_color=COLOR["blue"],
+            hover_color="#1a2537",
+            command=self._on_save_retention,
+        ).grid(row=2, column=3, padx=(0, 16), pady=4, sticky="w")
+
+        # ── Action buttons ────────────────────────────────────────────────
+        ctk.CTkButton(
+            frame, text="🗑 Clear All Pending",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color="#cf222e", hover_color="#a40e26",
+            text_color="#ffffff", height=32,
+            command=self._on_clear_cloud_queue,
+        ).grid(row=3, column=0, columnspan=4, padx=16, pady=(4, 14), sticky="w")
+
+    def _on_save_retention(self) -> None:
+        """Save the retention days setting to LocalDB."""
+        try:
+            days = int(self._retention_var.get().strip())
+            if days < 1:
+                raise ValueError
+            self._db.set_config("cloud_queue_retention_days", str(days))
+            self._log_console(f"Cloud queue retention set to {days} days")
+        except ValueError:
+            self._log_console("⚠️ Invalid retention value – enter a whole number ≥ 1")
+
+    def _on_clear_cloud_queue(self) -> None:
+        """Delete all pending events from the local queue."""
+        from tkinter import messagebox
+        count = self._db.get_pending_count()
+        if count == 0:
+            self._log_console("Cloud queue is already empty")
+            return
+        if messagebox.askyesno(
+            "Clear Cloud Queue",
+            f"Delete all {count} pending events?\nThis cannot be undone.",
+        ):
+            deleted = self._db.purge_all()
+            self._log_console(f"🗑 Cleared {deleted} pending cloud events")
+            self._update_queue_stats()
+
+    def _update_queue_stats(self) -> None:
+        """Refresh the queue status label (called from _poll)."""
+        if not hasattr(self, "_queue_status_lbl"):
+            return
+        count = self._db.get_pending_count()
+        if count == 0:
+            self._queue_status_lbl.configure(
+                text="● 0 events pending", text_color=COLOR["green"]
+            )
+        else:
+            age = self._db.get_oldest_pending_age_hours()
+            age_str = f"{age:.0f}h ago" if age is not None else "unknown"
+            self._queue_status_lbl.configure(
+                text=f"● {count} events pending  (oldest: {age_str})",
+                text_color=COLOR["yellow"],
+            )
+
+    # ── Data Monitor ──────────────────────────────────────────────────────────
+
     def _build_monitor_panel(self, parent) -> None:
+
         frame = ctk.CTkFrame(parent, fg_color=COLOR["surface"], corner_radius=12)
         frame.grid(row=0, column=0, sticky="nsew", padx=16, pady=(12, 0))
         frame.grid_rowconfigure(1, weight=1)
@@ -744,9 +854,11 @@ class FogLauncherApp(ctk.CTk):
                 )
                 return
 
-            # Always persist both paths to .env for next cold-start
+            # Always persist both paths – DB is primary, .env is Docker fallback
             _write_env("MODEL_PATH",  model_path)
             _write_env("SCALER_PATH", scaler_path)
+            self._db.set_config("model_path",  model_path)
+            self._db.set_config("scaler_path", scaler_path)
             self._log_console(f"Config saved → {Path(model_path).name} + {Path(scaler_path).name}")
 
             # Hot-reload if MQTT is live (no Docker restart needed!)
@@ -862,6 +974,14 @@ class FogLauncherApp(ctk.CTk):
         # ── Update status indicators ─────────────────────────────────────
         if self._current_status:
             self._update_status_ui(self._current_status)
+
+        # Update cloud queue stats every ~5s (every 20 poll cycles × 250ms)
+        if not hasattr(self, "_queue_poll_count"):
+            self._queue_poll_count = 0
+        self._queue_poll_count += 1
+        if self._queue_poll_count >= 20:
+            self._queue_poll_count = 0
+            self._update_queue_stats()
 
         self.after(self.POLL_MS, self._poll)
 

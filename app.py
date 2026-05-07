@@ -31,6 +31,7 @@ from config.settings import settings
 from core.cloud_sync import CloudSync
 from core.cloud_ws_relay import CloudWsRelay
 from core.discovery_service import DiscoveryService
+from core.local_db import LocalDB
 from core.mqtt_client import MQTTClient
 from core.session_manager import SessionManager
 from core.websocket_server import WebSocketServer
@@ -79,7 +80,8 @@ class FogApplication:
 
         # ── Components ──────────────────────────────────────────────────────
         self._ws_server       = WebSocketServer(settings)
-        self._cloud_sync      = CloudSync(settings)
+        self._local_db        = LocalDB()
+        self._cloud_sync      = CloudSync(settings, local_db=self._local_db)
         self._cloud_ws_relay  = CloudWsRelay(settings.cloud_ws_url, settings.device_id)
         self._session_manager = SessionManager()
         self._preprocessor = Preprocessor()   # no parameters needed anymore
@@ -117,6 +119,7 @@ class FogApplication:
                 tg.create_task(self._ws_server.start(),       name="websocket-server")
                 tg.create_task(self._message_processor(),     name="message-processor")
                 tg.create_task(self._cloud_sync_loop(),       name="cloud-sync")
+                tg.create_task(self._cloud_retry_loop(),      name="cloud-retry")
                 tg.create_task(self._shutdown_watcher(),      name="shutdown-watcher")
         except* asyncio.CancelledError:
             pass
@@ -180,8 +183,36 @@ class FogApplication:
         while self._running:
             await asyncio.sleep(0.5)
         for task in asyncio.all_tasks():
-            if task.get_name() in {"websocket-server", "message-processor", "cloud-sync"}:
+            if task.get_name() in {"websocket-server", "message-processor", "cloud-sync", "cloud-retry"}:
                 task.cancel()
+
+    async def _cloud_retry_loop(self) -> None:
+        """
+        Automatically drain the offline cloud queue every 60 seconds.
+
+        When the AWS IoT Core connection is re-established after an outage,
+        this loop will retry all queued events without any user action.
+        Old entries are purged based on the retention policy stored in LocalDB.
+        """
+        logger.info("Cloud retry loop started")
+        while self._running:
+            await asyncio.sleep(60)
+            if not self._running:
+                break
+
+            # Auto-purge events older than configured retention period
+            retention_days = int(self._local_db.get_config("cloud_queue_retention_days", "7"))
+            self._local_db.purge_old(retention_days)
+
+            # Drain queue if cloud is connected and there are pending items
+            pending = self._local_db.get_pending_count()
+            if pending > 0 and self._cloud_sync.is_connected:
+                logger.info(f"[CloudRetry] {pending} pending events, attempting drain…")
+                sent, failed = await self._cloud_sync.drain_queue()
+                if sent:
+                    logger.info(f"[CloudRetry] ✅ Sent {sent} queued events to cloud")
+                if failed:
+                    logger.warning(f"[CloudRetry] ⚠️ {failed} events still failed, will retry")
 
     # ── Core pipeline ──────────────────────────────────────────────────────
 
