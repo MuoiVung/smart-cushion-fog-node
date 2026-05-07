@@ -162,10 +162,18 @@ class FogApplication:
                 self._message_queue.task_done()
 
     async def _cloud_sync_loop(self) -> None:
+        """Background task to manage AWS IoT Core connection and sync."""
         if not settings.cloud_enabled:
-            logger.info("Cloud sync disabled. Task idle.")
+            logger.info("Cloud sync is disabled")
             await asyncio.Event().wait()
             return
+
+        try:
+            await self._cloud_sync.connect()
+        except Exception as exc:
+            logger.error(f"Initial cloud connection failed: {exc}. Will retry in background.")
+            # We don't re-raise here, so the TaskGroup stays alive for other services
+
         logger.info(f"Cloud sync loop started (interval={settings.cloud_sync_interval}s)")
         while self._running:
             await asyncio.sleep(settings.cloud_sync_interval)
@@ -194,9 +202,8 @@ class FogApplication:
         """
         Automatically drain the offline cloud queue every 60 seconds.
 
-        When the AWS IoT Core connection is re-established after an outage,
-        this loop will retry all queued events without any user action.
-        Old entries are purged based on the retention policy stored in LocalDB.
+        Also attempts to reconnect to AWS IoT Core if the connection was lost
+        or failed at startup.
         """
         logger.info("Cloud retry loop started")
         while self._running:
@@ -204,11 +211,19 @@ class FogApplication:
             if not self._running:
                 break
 
-            # Auto-purge events older than configured retention period
+            # 1. Reconnect if enabled but offline
+            if settings.cloud_enabled and not self._cloud_sync.is_connected:
+                try:
+                    logger.info("[CloudRetry] Attempting to reconnect to AWS IoT Core…")
+                    await self._cloud_sync.connect()
+                except Exception as exc:
+                    logger.debug(f"[CloudRetry] Reconnection failed: {exc}")
+
+            # 2. Auto-purge events older than configured retention period
             retention_days = int(self._local_db.get_config("cloud_queue_retention_days", "7"))
             self._local_db.purge_old(retention_days)
 
-            # Drain queue if cloud is connected and there are pending items
+            # 3. Drain queue if cloud is connected and there are pending items
             pending = self._local_db.get_pending_count()
             if pending > 0 and self._cloud_sync.is_connected:
                 logger.info(f"[CloudRetry] {pending} pending events, attempting drain…")
