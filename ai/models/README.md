@@ -1,48 +1,40 @@
-# AI Model Weights – Place Your Trained Model Here
+# AI Model Weights & Scalers
 
-This directory holds the PyTorch model weight file loaded by `InferenceEngine`.
+Place your trained Keras model files and scikit-learn scalers here.
 
-## Expected filename
+## 📂 Expected Formats
 
-```
-ai/models/posture_model.pt
-```
+### 1. Keras Model (`.h5` or `.keras`)
+- **Architecture**: 2D CNN (usually expects a 3x3 input matrix).
+- **Input**: Normalised FSR values (9 sensors).
+- **Output**: Posture logits/probabilities.
 
-This path can be overridden with the `MODEL_PATH` environment variable in `.env`.
+### 2. Scaler (`.pkl`)
+- **Format**: `sklearn.preprocessing.MinMaxScaler` exported via `joblib`.
+- **Purpose**: Normalises raw ADC values (0–4095) to the range used during training (usually 0–1).
 
-## Why is this directory empty in the repository?
+---
 
-- Binary model files can be **several hundred MB** and should not be stored in Git.
-- Instead, distribute the trained weights separately (e.g., via a GitHub Release,
-  Google Drive link, or a model registry such as MLflow / HuggingFace Hub).
-- The `*.pt` glob is listed in `.gitignore` to prevent accidental commits.
+## 🛠 Model Management
 
-## What happens without a model file?
+The Fog Node uses a **Local Database** as the primary source of truth for model paths.
+- You can change models via the **Launcher UI** under "Config & Control".
+- **Hot-Reload**: Changing models via the UI updates the running engine immediately without a restart.
 
-The `InferenceEngine` automatically falls back to a **built-in rule-based classifier**
-that uses FSR symmetry heuristics to detect common posture deviations.
-The rule-based stub works well enough for integration testing and initial demos.
+### Filename Naming Convention
+For auto-detection to work in the Launcher, use matching suffixes:
+- Model: `posture_9_model_variantName.h5`
+- Scaler: `fsr_scaler_9_variantName.pkl`
 
-## Training a model
+---
 
-Refer to the project's main documentation or the companion training notebook.
-The expected model format is a `PostureMLP` state dict:
+## ⚙️ Training Data Flow
+1. **Raw**: 9 sensors → ADC [0-4095].
+2. **Preprocess**: Reshape to (1, 3, 3, 1).
+3. **Scale**: Apply `.pkl` scaler.
+4. **Predict**: Inference via `.h5` model.
 
-```python
-# Save
-import torch
-torch.save(model.state_dict(), "ai/models/posture_model.pt")
+---
 
-# Verify
-model = PostureMLP()
-model.load_state_dict(torch.load("ai/models/posture_model.pt", map_location="cpu"))
-model.eval()
-```
-
-### Input / Output spec
-
-| | Detail |
-|---|---|
-| **Input shape** | `(batch, 4)` – four normalised FSR values in `[0, 1]` |
-| **Output shape** | `(batch, 5)` – logits for five posture classes |
-| **Classes (index)** | `0=correct, 1=lean_left, 2=lean_right, 3=slouch_forward, 4=lean_back` |
+## ⚠️ FALLBACK
+If no model is found or loading fails, the system uses a **Rule-based Stub** which uses FSR symmetry heuristics to detect occupancy and basic postures.

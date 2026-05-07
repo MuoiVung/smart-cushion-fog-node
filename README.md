@@ -20,7 +20,7 @@ To keep the repository clean, all technical documentation has been moved to the 
 1.  **Environment**:
     ```bash
     cp .env.example .env
-    # Update MQTT and Model paths in .env
+    # Update AWS credentials and initial paths in .env
     ```
 
 2.  **Requirements**:
@@ -33,10 +33,27 @@ To keep the repository clean, all technical documentation has been moved to the 
     python run_launcher.py
     ```
 
-## 🧠 AI Features
--   **9-Posture Classifier**: Recognizes 9 human sitting postures (NUP, LF, LB, etc.).
--   **Smart Empty Detection**: Automatically detects empty cushion state when total sensor pressure < 1000.
--   **Keras CNN 2D**: Processes a 3x3 FSR pressure matrix for high-accuracy classification.
+---
+
+## ✨ New Features (May 2026)
+
+### 🔥 AI Hot-Reload
+Change AI models on the fly without restarting the Fog Node or Docker containers.
+- **Auto-Detection**: When you select a `.h5` model, the Launcher automatically finds the matching `.pkl` scaler.
+- **MQTT Trigger**: Updates are pushed to the running engine in ~2 seconds.
+
+### 📦 Local SQLite Persistence
+A new `data/fog_local.db` file stores:
+- **Config Store**: AI model paths are now saved in a database, making `.env` safer from manual errors.
+- **Offline Cloud Queue**: If the internet goes down, AWS IoT events are buffered locally and automatically retried when connectivity is restored.
+
+---
+
+## 🧠 AI Pipeline
+-   **Model**: Keras CNN 2D (Processes 3x3 FSR matrix).
+-   **Inputs**: 9 raw ADC values (0–4095) from FSR sensors.
+-   **Normalization**: Handled by an `sklearn` MinMaxScaler (.pkl) inside the engine.
+-   **Labels**: Detects 9-11 postures including `Empty`, `Object`, and specific leanings.
 
 ---
 © 2026 ErgoVita Team
