@@ -115,7 +115,13 @@ class FogApplication:
 
         mqtt_client.start()
         if settings.cloud_enabled:
-            await self._cloud_sync.connect()
+            try:
+                await self._cloud_sync.connect()
+            except Exception as exc:
+                logger.error(
+                    f"[CloudSync] Initial connection failed: {exc}. "
+                    "Running in offline mode – will retry every 60s."
+                )
         await self._cloud_ws_relay.start()
 
         try:
