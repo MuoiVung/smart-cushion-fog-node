@@ -128,15 +128,6 @@ class FogApplication:
                 )
         await self._cloud_ws_relay.start()
 
-        # ── Broadcast ALIVE signal ──────────────────────────────────────────
-        # Helps triggered devices realize the broker is back online
-        mqtt_client.publish("cushion/status", json.dumps({
-            "state": "online",
-            "device": "fog_node",
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }), retain=True)
-        logger.info("📢 Fog Node 'ALIVE' signal broadcasted to cushion/status")
-
         try:
             async with asyncio.TaskGroup() as tg:
                 tg.create_task(self._ws_server.start(),       name="websocket-server")
