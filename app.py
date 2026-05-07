@@ -77,7 +77,6 @@ class FogApplication:
         
         # Runtime Config (Always starts as True by default)
         self._vibration_enabled: bool = True
-        self._current_posture = PostureLabel.EMPTY
 
         # ── Components ──────────────────────────────────────────────────────
         self._ws_server       = WebSocketServer(settings)
@@ -365,26 +364,9 @@ class FogApplication:
                     fog_timestamp_iso=datetime.now(timezone.utc).isoformat(),
                     event_type=EventType.SESSION_STARTED,
                     occupancy_state=occupancy,
-                    posture=posture,
-                )
                 asyncio.create_task(self._cloud_sync.publish_event(event))
-                self._current_posture = posture
 
             self._session_manager.add_reading(posture, current_ts)
-            
-            # Detect posture change to trigger event
-            if posture != self._current_posture:
-                logger.info(f"Posture changed: {self._current_posture.value} -> {posture.value}")
-                event = CloudEventRecord(
-                    device_id=settings.device_id,
-                    session_id=self._session_id,
-                    fog_timestamp_iso=datetime.now(timezone.utc).isoformat(),
-                    event_type=EventType.POSTURE_CHANGED,
-                    occupancy_state=occupancy,
-                    posture=posture,
-                )
-                asyncio.create_task(self._cloud_sync.publish_event(event))
-                self._current_posture = posture
 
         if not person_is_sitting and self._session_start is not None:
             # Session ended
@@ -418,7 +400,6 @@ class FogApplication:
             self._consecutive_bad = 0
             self._alert_status    = AlertStatus.IDLE
             self._alert_active    = False
-            self._current_posture = PostureLabel.EMPTY
 
 
         session_duration_sec = 0

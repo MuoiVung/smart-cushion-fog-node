@@ -119,34 +119,39 @@ class CloudSync:
         message     = payload.model_dump_json()
         record_type = getattr(payload, "record_type", "unknown")
 
-        # ── Not connected: queue for later ───────────────────────────────
-        if not self._settings.cloud_enabled or not self._client or not self._connected:
+        logger.debug(f"[CloudSync] Attempting to publish {record_type} to {topic}")
+
+        # ── Not connected or Disabled: queue for later ────────────────────────
+        is_cloud_ready = self._settings.cloud_enabled and self._client and self._connected
+        
+        if not is_cloud_ready:
             if self._settings.cloud_enabled and self._local_db:
                 self._local_db.enqueue(record_type, topic, message)
                 count = self._local_db.get_pending_count()
                 logger.warning(
-                    f"[CloudQueue] Cloud offline – {record_type} queued "
-                    f"({count} pending total)"
+                    f"[CloudQueue] Cloud OFFLINE – {record_type} enqueued to LocalDB "
+                    f"(Total pending: {count})"
                 )
             else:
-                logger.debug("Cloud sync skipped (disabled or not connected)")
+                logger.debug(f"[CloudSync] {record_type} skipped (Cloud enabled={self._settings.cloud_enabled}, Connected={self._connected})")
             return
 
         # ── Try to publish ────────────────────────────────────────────────
         loop = asyncio.get_event_loop()
         try:
+            logger.debug(f"[CloudSync] Sending {record_type} to AWS IoT Core...")
             result = await loop.run_in_executor(
                 None,
                 lambda: self._client.publish(topic=topic, payload=message, qos=1),
             )
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                logger.info(f"Cloud sync published to '{topic}' [{record_type}]")
+                logger.info(f"✅ [CloudSync] Successfully published {record_type} to '{topic}'")
             else:
-                logger.error(f"Cloud publish failed (rc={result.rc}) → {topic}")
+                logger.error(f"❌ [CloudSync] Publish failed (rc={result.rc}) for {record_type}. Enqueueing to LocalDB.")
                 if self._local_db:
                     self._local_db.enqueue(record_type, topic, message)
         except Exception as exc:
-            logger.error(f"Cloud sync error: {exc}", exc_info=True)
+            logger.error(f"🔥 [CloudSync] Critical error during publish: {exc}. Enqueueing to LocalDB.")
             if self._local_db:
                 self._local_db.enqueue(record_type, topic, message)
 
