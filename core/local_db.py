@@ -44,9 +44,10 @@ class LocalDB:
     # ── Schema ─────────────────────────────────────────────────────────────
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self._path), timeout=10)
+        conn = sqlite3.connect(str(self._path), timeout=30, check_same_thread=False)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")   # Better concurrent access
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=10000")  # Wait up to 10s on lock
         return conn
 
     def _init_schema(self) -> None:
@@ -94,18 +95,31 @@ class LocalDB:
     # ── Cloud Queue ────────────────────────────────────────────────────────
 
     def enqueue(self, record_type: str, topic: str, payload_json: str) -> int:
-        """Add a failed cloud publish to the pending queue. Returns new row id."""
+        """Add a failed cloud publish to the pending queue.
+        Retries up to 3 times on transient disk I/O errors (Docker bind mount on macOS).
+        """
+        import time
         now = _now_iso()
-        with self._lock, self._connect() as conn:
-            cur = conn.execute(
-                """INSERT INTO pending_cloud_queue
-                   (record_type, topic, payload, created_at, retry_count)
-                   VALUES (?, ?, ?, ?, 0)""",
-                (record_type, topic, payload_json, now),
-            )
-            row_id = cur.lastrowid
-        logger.debug(f"[LocalDB] Enqueued {record_type} (id={row_id})")
-        return row_id
+        for attempt in range(3):
+            try:
+                with self._lock, self._connect() as conn:
+                    cur = conn.execute(
+                        """INSERT INTO pending_cloud_queue
+                           (record_type, topic, payload, created_at, retry_count)
+                           VALUES (?, ?, ?, ?, 0)""",
+                        (record_type, topic, payload_json, now),
+                    )
+                    row_id = cur.lastrowid
+                logger.debug(f"[LocalDB] Enqueued {record_type} (id={row_id})")
+                return row_id
+            except sqlite3.OperationalError as e:
+                if attempt < 2:
+                    logger.warning(f"[LocalDB] enqueue retry {attempt+1}/3 due to: {e}")
+                    time.sleep(0.2 * (attempt + 1))
+                else:
+                    logger.error(f"[LocalDB] enqueue failed after 3 retries: {e}")
+                    raise
+        return -1
 
     def get_pending(self, limit: int = 100) -> list[dict]:
         """Return up to `limit` oldest pending events ordered by creation time."""

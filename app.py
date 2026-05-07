@@ -364,6 +364,7 @@ class FogApplication:
                     fog_timestamp_iso=datetime.now(timezone.utc).isoformat(),
                     event_type=EventType.SESSION_STARTED,
                     occupancy_state=occupancy,
+                )
                 asyncio.create_task(self._cloud_sync.publish_event(event))
 
             self._session_manager.add_reading(posture, current_ts)
