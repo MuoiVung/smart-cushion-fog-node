@@ -854,9 +854,7 @@ class FogLauncherApp(ctk.CTk):
                 )
                 return
 
-            # Always persist both paths – DB is primary, .env is Docker fallback
-            _write_env("MODEL_PATH",  model_path)
-            _write_env("SCALER_PATH", scaler_path)
+            # Persist to DB (sole source of truth for model paths)
             self._db.set_config("model_path",  model_path)
             self._db.set_config("scaler_path", scaler_path)
             self._log_console(f"Config saved → {Path(model_path).name} + {Path(scaler_path).name}")

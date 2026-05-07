@@ -85,9 +85,13 @@ class FogApplication:
         self._cloud_ws_relay  = CloudWsRelay(settings.cloud_ws_url, settings.device_id)
         self._session_manager = SessionManager()
         self._preprocessor = Preprocessor()   # no parameters needed anymore
+
+        # Read model paths from DB (source of truth); fall back to .env on first run
+        _model_path  = self._local_db.get_config("model_path",  settings.model_path)
+        _scaler_path = self._local_db.get_config("scaler_path", settings.scaler_path)
         self._inference = InferenceEngine(
-            model_path  = settings.model_path,
-            scaler_path = settings.scaler_path,
+            model_path  = _model_path,
+            scaler_path = _scaler_path,
         )
 
     # ── Application lifecycle ──────────────────────────────────────────────
