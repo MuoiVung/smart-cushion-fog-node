@@ -117,6 +117,10 @@ class FogApplication:
         if settings.cloud_enabled:
             try:
                 await self._cloud_sync.connect()
+                # Immediately drain any events queued while we were offline
+                if self._local_db.get_pending_count() > 0:
+                    logger.info("[CloudSync] Connected – draining offline queue immediately")
+                    await self._cloud_sync.drain_queue()
             except Exception as exc:
                 logger.error(
                     f"[CloudSync] Initial connection failed: {exc}. "
@@ -168,31 +172,26 @@ class FogApplication:
                 self._message_queue.task_done()
 
     async def _cloud_sync_loop(self) -> None:
-        """Background task to manage AWS IoT Core connection and sync."""
+        """Periodically publish telemetry to AWS IoT Core while a session is active."""
         if not settings.cloud_enabled:
             logger.info("Cloud sync is disabled")
             await asyncio.Event().wait()
             return
 
-        try:
-            await self._cloud_sync.connect()
-        except Exception as exc:
-            logger.error(f"Initial cloud connection failed: {exc}. Will retry in background.")
-            # We don't re-raise here, so the TaskGroup stays alive for other services
-
-        logger.info(f"Cloud sync loop started (interval={settings.cloud_sync_interval}s)")
+        # NOTE: initial connection is handled in run(); reconnection in _cloud_retry_loop
+        logger.info(f"Cloud telemetry loop started (interval={settings.cloud_sync_interval}s)")
         while self._running:
             await asyncio.sleep(settings.cloud_sync_interval)
             if not self._running:
                 break
-            
+
             if self._session_start is not None and self._session_id:
                 telemetry = CloudTelemetryRecord(
                     device_id=settings.device_id,
                     session_id=self._session_id,
                     fog_timestamp_iso=datetime.now(timezone.utc).isoformat(),
                     occupancy_state=OccupancyState.OCCUPIED,
-                    posture=PostureLabel.NUP, # We just use NUP as a placeholder if we don't store current posture, or we can use it from self._current_sensors
+                    posture=PostureLabel.NUP,
                     alert_active=self._alert_active,
                 )
                 await self._cloud_sync.publish_telemetry(telemetry)
@@ -206,10 +205,7 @@ class FogApplication:
 
     async def _cloud_retry_loop(self) -> None:
         """
-        Automatically drain the offline cloud queue every 60 seconds.
-
-        Also attempts to reconnect to AWS IoT Core if the connection was lost
-        or failed at startup.
+        Every 60s: reconnect if offline, purge old events, drain pending queue.
         """
         logger.info("Cloud retry loop started")
         while self._running:
@@ -222,8 +218,13 @@ class FogApplication:
                 try:
                     logger.info("[CloudRetry] Attempting to reconnect to AWS IoT Core…")
                     await self._cloud_sync.connect()
+                    if self._cloud_sync.is_connected:
+                        logger.info("[CloudRetry] ✅ Reconnected – draining offline queue")
+                        await self._cloud_sync.drain_queue()
+                        continue   # skip purge this cycle, next cycle will handle it
                 except Exception as exc:
                     logger.debug(f"[CloudRetry] Reconnection failed: {exc}")
+                    continue
 
             # 2. Auto-purge events older than configured retention period
             retention_days = int(self._local_db.get_config("cloud_queue_retention_days", "7"))
@@ -232,7 +233,7 @@ class FogApplication:
             # 3. Drain queue if cloud is connected and there are pending items
             pending = self._local_db.get_pending_count()
             if pending > 0 and self._cloud_sync.is_connected:
-                logger.info(f"[CloudRetry] {pending} pending events, attempting drain…")
+                logger.info(f"[CloudRetry] {pending} pending events, draining…")
                 sent, failed = await self._cloud_sync.drain_queue()
                 if sent:
                     logger.info(f"[CloudRetry] ✅ Sent {sent} queued events to cloud")
