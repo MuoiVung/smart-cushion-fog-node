@@ -104,6 +104,29 @@ class MQTTMonitor:
         else:
             self._log(f"⚠️ Cannot publish config: MQTT monitor not connected")
 
+    def publish_model_reload(self, model_path: str, scaler_path: str) -> bool:
+        """
+        Publish a hot-reload command to the Fog Node.
+
+        The Fog Node will swap its InferenceEngine instance in-place without
+        restarting Docker or the Python process.
+
+        Returns:
+            True if the message was published, False if MQTT is not connected.
+        """
+        if self._client and self._connected:
+            from pathlib import Path
+            payload = json.dumps({
+                "model_path":  model_path,
+                "scaler_path": scaler_path,
+            })
+            self._client.publish("cushion/fog/model_reload", payload, qos=1)
+            self._log(f"🔥 Hot-reload published: {Path(model_path).name} + {Path(scaler_path).name}")
+            return True
+        else:
+            self._log("⚠️ Cannot publish model_reload: MQTT monitor not connected")
+            return False
+
     # ── Connection loop ────────────────────────────────────────────────────
 
     def _connect_loop(self) -> None:

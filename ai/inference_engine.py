@@ -124,6 +124,45 @@ class InferenceEngine:
         """True when no trained model was found and the rule-based stub is active."""
         return self._use_stub
 
+    def reload(self, model_path: str, scaler_path: str) -> bool:
+        """
+        Hot-reload model and scaler in-place without restarting the Fog Node.
+
+        If loading the new files fails, the previous model is automatically
+        restored so inference continues uninterrupted.
+
+        Returns:
+            True if reload succeeded, False if it failed (old model kept active).
+        """
+        old_model      = self._model
+        old_scaler     = self._scaler
+        old_use_stub   = self._use_stub
+        old_is_binary  = self._is_binary
+        old_model_path = self._model_path
+        old_scaler_path= self._scaler_path
+
+        self._model_path  = Path(model_path)
+        self._scaler_path = Path(scaler_path)
+        self._model       = None
+        self._scaler      = None
+        self._use_stub    = False
+
+        self._load_model()
+
+        if self._use_stub and not (old_use_stub):
+            # New model failed to load — restore previous state
+            self._model       = old_model
+            self._scaler      = old_scaler
+            self._use_stub    = old_use_stub
+            self._is_binary   = old_is_binary
+            self._model_path  = old_model_path
+            self._scaler_path = old_scaler_path
+            logger.error("[HOT-RELOAD] ❌ Failed to load new model — previous model is still active")
+            return False
+
+        logger.info(f"[HOT-RELOAD] ✅ Model swapped: {self._model_path.name} + {self._scaler_path.name}")
+        return True
+
     def predict(self, raw_sensors: np.ndarray) -> Tuple[PostureLabel, float]:
         """
         Predict an 11-label posture/state from raw FSR sensor values.

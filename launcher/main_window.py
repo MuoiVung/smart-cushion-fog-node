@@ -384,7 +384,7 @@ class FogLauncherApp(ctk.CTk):
             text_color=COLOR["muted"],
         ).grid(row=0, column=0, columnspan=4, padx=16, pady=(14, 8), sticky="w")
 
-        # Mode selector
+        # ── Mode selector ─────────────────────────────────────────────────
         self._model_mode = ctk.StringVar(value="keras")
 
         ctk.CTkRadioButton(
@@ -394,14 +394,19 @@ class FogLauncherApp(ctk.CTk):
             command=self._on_model_mode_change,
         ).grid(row=1, column=0, padx=16, pady=4, sticky="w")
 
-        self._rb_model = ctk.CTkRadioButton(
+        ctk.CTkRadioButton(
             frame, text="Keras Model  (.h5 / .keras)",
             variable=self._model_mode, value="keras",
             font=ctk.CTkFont(size=13, weight="bold"),
             command=self._on_model_mode_change,
         ).grid(row=1, column=1, padx=8, pady=4, sticky="w")
 
-        # File path entry
+        # ── Row 2: Model file (.h5) ───────────────────────────────────────
+        ctk.CTkLabel(
+            frame, text="Model (.h5):",
+            font=ctk.CTkFont(size=11), text_color=COLOR["muted"],
+        ).grid(row=2, column=0, padx=16, pady=4, sticky="e")
+
         self._model_path_var = ctk.StringVar(value=_read_env("MODEL_PATH", "ai/models/posture_9_model.h5"))
         self._model_entry = ctk.CTkEntry(
             frame,
@@ -411,20 +416,52 @@ class FogLauncherApp(ctk.CTk):
             corner_radius=6,
             height=32,
         )
-        self._model_entry.grid(row=1, column=2, padx=8, pady=4, sticky="ew")
+        self._model_entry.grid(row=2, column=1, columnspan=2, padx=8, pady=4, sticky="ew")
 
         self._browse_btn = ctk.CTkButton(
             frame, text="Browse…", width=80, height=32,
-            fg_color=COLOR["surface"],
-            border_color=COLOR["blue"],
-            border_width=1,
-            text_color=COLOR["blue"],
-            hover_color="#1a2537",
-            state="disabled",
+            fg_color=COLOR["surface"], border_color=COLOR["blue"],
+            border_width=1, text_color=COLOR["blue"],
+            hover_color="#1a2537", state="disabled",
             command=self._on_browse_model,
         )
-        self._browse_btn.grid(row=1, column=3, padx=(0, 8), pady=4)
+        self._browse_btn.grid(row=2, column=3, padx=(0, 8), pady=4)
 
+        # ── Row 3: Scaler file (.pkl) ─────────────────────────────────────
+        ctk.CTkLabel(
+            frame, text="Scaler (.pkl):",
+            font=ctk.CTkFont(size=11), text_color=COLOR["muted"],
+        ).grid(row=3, column=0, padx=16, pady=4, sticky="e")
+
+        self._scaler_path_var = ctk.StringVar(value=_read_env("SCALER_PATH", "ai/models/fsr_scaler_9.pkl"))
+        self._scaler_entry = ctk.CTkEntry(
+            frame,
+            textvariable=self._scaler_path_var,
+            font=ctk.CTkFont(family="Courier", size=11),
+            state="disabled",
+            corner_radius=6,
+            height=32,
+        )
+        self._scaler_entry.grid(row=3, column=1, columnspan=2, padx=8, pady=4, sticky="ew")
+
+        self._scaler_browse_btn = ctk.CTkButton(
+            frame, text="Browse…", width=80, height=32,
+            fg_color=COLOR["surface"], border_color=COLOR["blue"],
+            border_width=1, text_color=COLOR["blue"],
+            hover_color="#1a2537", state="disabled",
+            command=self._on_browse_scaler,
+        )
+        self._scaler_browse_btn.grid(row=3, column=3, padx=(0, 8), pady=4)
+
+        # ── Row 4: Match status label ─────────────────────────────────────
+        self._model_match_label = ctk.CTkLabel(
+            frame, text="",
+            font=ctk.CTkFont(size=11),
+            text_color=COLOR["green"],
+        )
+        self._model_match_label.grid(row=4, column=0, columnspan=4, padx=16, pady=(0, 2), sticky="w")
+
+        # ── Row 5: Apply / Hot-Reload button ─────────────────────────────
         self._apply_btn = ctk.CTkButton(
             frame, text="Apply & Restart Fog Node",
             font=ctk.CTkFont(size=12, weight="bold"),
@@ -435,10 +472,11 @@ class FogLauncherApp(ctk.CTk):
             height=32,
             command=self._on_apply_model,
         )
-        self._apply_btn.grid(row=2, column=0, columnspan=4, padx=16, pady=(4, 14), sticky="w")
-        
+        self._apply_btn.grid(row=5, column=0, columnspan=4, padx=16, pady=(4, 14), sticky="w")
+
         # Sync UI state with default mode
         self._on_model_mode_change()
+
 
     # ── Data Monitor ──────────────────────────────────────────────────────────
 
@@ -604,38 +642,138 @@ class FogLauncherApp(ctk.CTk):
         if mode == "keras":
             self._model_entry.configure(state="normal")
             self._browse_btn.configure(state="normal")
+            self._scaler_entry.configure(state="normal")
+            self._scaler_browse_btn.configure(state="normal")
         else:
             self._model_entry.configure(state="disabled")
             self._browse_btn.configure(state="disabled")
+            self._scaler_entry.configure(state="disabled")
+            self._scaler_browse_btn.configure(state="disabled")
+            self._model_match_label.configure(text="")
 
     def _on_browse_model(self) -> None:
         path = filedialog.askopenfilename(
-            title="Select Keras Model",
+            title="Select Keras Model (.h5)",
             filetypes=[("Keras Model", "*.h5 *.keras"), ("All Files", "*")],
             initialdir=str(PROJECT_ROOT / "ai" / "models"),
         )
         if path:
             self._model_path_var.set(path)
+            # Auto-detect paired scaler
+            matched = self._guess_paired_scaler(path)
+            if matched:
+                self._scaler_path_var.set(matched)
+                from pathlib import Path as _Path
+                self._model_match_label.configure(
+                    text=f"✅ Scaler auto-matched: {_Path(matched).name}",
+                    text_color=COLOR["green"],
+                )
+            else:
+                self._model_match_label.configure(
+                    text="⚠️ No matching scaler found — please browse for .pkl manually",
+                    text_color=COLOR["yellow"],
+                )
+
+    def _on_browse_scaler(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Select Scaler (.pkl)",
+            filetypes=[("Pickle Scaler", "*.pkl"), ("All Files", "*")],
+            initialdir=str(PROJECT_ROOT / "ai" / "models"),
+        )
+        if path:
+            self._scaler_path_var.set(path)
+            from pathlib import Path as _Path
+            self._model_match_label.configure(
+                text=f"📦 Scaler manually set: {_Path(path).name}",
+                text_color=COLOR["blue"],
+            )
+
+    def _guess_paired_scaler(self, h5_path: str) -> Optional[str]:
+        """
+        Try to auto-detect the matching .pkl scaler for a selected .h5 model.
+
+        Strategy:
+          1. If only one .pkl exists in the same folder → use it.
+          2. Extract the variant suffix from the .h5 stem (e.g. "_mix", "_anhPhuong")
+             and look for a .pkl containing that suffix.
+          3. If still ambiguous → return None (user must pick manually).
+        """
+        h5 = Path(h5_path)
+        model_dir = h5.parent
+        pkl_files = list(model_dir.glob("*.pkl"))
+
+        if not pkl_files:
+            return None
+        if len(pkl_files) == 1:
+            return str(pkl_files[0])
+
+        # Extract variant: "posture_9_model_mix" → variant = "mix"
+        stem    = h5.stem
+        variant = None
+        for marker in ["_model_", "_model"]:
+            if marker in stem:
+                variant = stem.split(marker, 1)[1]  # e.g. "mix" or "anhPhuong"
+                break
+
+        if variant:
+            for pkl in pkl_files:
+                if variant.lower() in pkl.stem.lower():
+                    return str(pkl)
+
+        return None  # Ambiguous — let user choose manually
 
     def _on_apply_model(self) -> None:
         mode = self._model_mode.get()
         if mode == "keras":
-            model_path = self._model_path_var.get().strip()
+            model_path  = self._model_path_var.get().strip()
+            scaler_path = self._scaler_path_var.get().strip()
+
+            # Validate model file
             if not Path(model_path).exists() and not Path(PROJECT_ROOT / model_path).exists():
                 messagebox.showwarning(
                     "Model Not Found",
-                    f"The file was not found:\n{model_path}\n\nUsing rule-based mode instead.",
+                    f"Model file not found:\n{model_path}\n\nPlease browse for a valid .h5 file.",
                 )
-                _write_env("MODEL_PATH", "ai/models/smart_cushion_model.h5")
-            else:
-                _write_env("MODEL_PATH", model_path)
-            self._log_console(f"MODEL_PATH updated to: {model_path}")
-        else:
-            # Force model path to a non-existent file → triggers stub fallback
-            _write_env("MODEL_PATH", "ai/models/dummy_model.h5")
-            self._log_console("AI Mode: Rule-based stub (model file will be ignored)")
+                return
 
-        self._docker.restart_fog_node()
+            # Validate scaler file
+            if not Path(scaler_path).exists() and not Path(PROJECT_ROOT / scaler_path).exists():
+                messagebox.showwarning(
+                    "Scaler Not Found",
+                    f"Scaler file not found:\n{scaler_path}\n\nPlease browse for the matching .pkl file.",
+                )
+                return
+
+            # Always persist both paths to .env for next cold-start
+            _write_env("MODEL_PATH",  model_path)
+            _write_env("SCALER_PATH", scaler_path)
+            self._log_console(f"Config saved → {Path(model_path).name} + {Path(scaler_path).name}")
+
+            # Hot-reload if MQTT is live (no Docker restart needed!)
+            if self._mqtt_connected:
+                ok = self._mqtt_monitor.publish_model_reload(model_path, scaler_path)
+                if ok:
+                    self._log_console("🔥 Hot-reload sent — model will swap in ~2s without restart")
+                    self._apply_btn.configure(text="🔥 Sent! (no restart needed)")
+                    self.after(3000, lambda: self._apply_btn.configure(text="Apply & Restart Fog Node"))
+                    return
+
+            # Fallback: MQTT not connected → restart fog node
+            self._log_console("⚙️ MQTT offline — restarting Fog Node to apply model…")
+            self._docker.restart_fog_node()
+        else:
+            # Rule-based stub mode
+            _write_env("MODEL_PATH",  "ai/models/dummy_model.h5")
+            _write_env("SCALER_PATH", "ai/models/dummy_scaler.pkl")
+            self._log_console("AI Mode: Rule-based stub (model files will be ignored)")
+            if self._mqtt_connected:
+                self._mqtt_monitor.publish_model_reload(
+                    "ai/models/dummy_model.h5",
+                    "ai/models/dummy_scaler.pkl",
+                )
+            else:
+                self._docker.restart_fog_node()
+
 
     def _on_channel_menu_change(self, selected_label: str) -> None:
         key = self._label_to_key.get(selected_label)

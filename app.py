@@ -23,6 +23,7 @@ import signal
 import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from ai.inference_engine import InferenceEngine
 from ai.preprocessor import Preprocessor
@@ -146,6 +147,8 @@ class FogApplication:
                     await self._process_sensor_data(payload)
                 elif topic == "cushion/fog/config":
                     await self._process_config_data(payload)
+                elif topic == "cushion/fog/model_reload":
+                    await self._process_model_reload(payload)
             except Exception:
                 logger.exception(f"Error processing message on topic {topic}")
             finally:
@@ -201,6 +204,43 @@ class FogApplication:
                     logger.info("[CONFIG] Vibration disabled - force stopping active alert")
         except Exception as e:
             logger.error(f"Failed to parse config message: {e}")
+
+    async def _process_model_reload(self, payload: bytes) -> None:
+        """
+        Hot-reload AI model without restarting the Fog Node.
+
+        Received from Launcher via MQTT topic: cushion/fog/model_reload
+        Payload: {"model_path": "...", "scaler_path": "..."}
+
+        The InferenceEngine.reload() swaps the model in-place and automatically
+        restores the old model if loading fails, so inference is never interrupted.
+        """
+        try:
+            data = json.loads(payload.decode())
+            new_model_path  = data.get("model_path",  "").strip()
+            new_scaler_path = data.get("scaler_path", "").strip()
+
+            if not new_model_path or not new_scaler_path:
+                logger.error("[HOT-RELOAD] Missing model_path or scaler_path in payload")
+                return
+
+            mp = Path(new_model_path)
+            sp = Path(new_scaler_path)
+
+            if not mp.exists():
+                logger.error(f"[HOT-RELOAD] Model file not found: {mp}")
+                return
+            if not sp.exists():
+                logger.error(f"[HOT-RELOAD] Scaler file not found: {sp}")
+                return
+
+            logger.info(f"[HOT-RELOAD] Swapping model → {mp.name} + {sp.name}")
+            success = self._inference.reload(str(mp), str(sp))
+            if not success:
+                logger.warning("[HOT-RELOAD] Swap failed — previous model still active")
+
+        except Exception as e:
+            logger.error(f"[HOT-RELOAD] Unexpected error: {e}")
 
     async def _process_sensor_data(self, raw_bytes: bytes) -> None:
         """

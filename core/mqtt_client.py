@@ -148,7 +148,12 @@ class MQTTClient:
             client.subscribe(self._settings.mqtt_topic_raw, qos=0)
             # Subscribe to runtime config topic
             client.subscribe("cushion/fog/config", qos=1)
-            logger.info(f"Subscribed to: {self._settings.mqtt_topic_raw} and cushion/fog/config")
+            # Subscribe to hot-reload topic (model swap without restart)
+            client.subscribe("cushion/fog/model_reload", qos=1)
+            logger.info(
+                f"Subscribed to: {self._settings.mqtt_topic_raw}, "
+                "cushion/fog/config, cushion/fog/model_reload"
+            )
         else:
             logger.error(f"MQTT connection failed (rc={rc}): {mqtt.connack_string(rc)}")
 
