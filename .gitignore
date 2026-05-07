@@ -64,6 +64,11 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# ── Local Database (Config & Queues) ──────────────────────
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
 # ── Data Exports ──────────────────────────────────────────
 data_exports/
 
