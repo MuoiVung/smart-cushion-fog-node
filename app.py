@@ -17,6 +17,7 @@ Periodic cloud sync:
 """
 
 import asyncio
+from collections import Counter, deque
 import json
 import logging
 import signal
@@ -93,6 +94,15 @@ class FogApplication:
             model_path  = _model_path,
             scaler_path = _scaler_path,
         )
+
+        # ── Prediction smoothing & confidence filter ─────────────────────────
+        # Values are persisted in LocalDB; update via cushion/fog/config MQTT.
+        self._min_confidence        = float(self._local_db.get_config("min_confidence",       "0.70"))
+        self._smoothing_window_size = int(self._local_db.get_config("smoothing_window_size",  "10"))
+        self._smoothing_min_votes   = int(self._local_db.get_config("smoothing_min_votes",    "7"))
+        self._prediction_window: deque[str] = deque(maxlen=self._smoothing_window_size)
+        self._last_stable_posture: PostureLabel  = PostureLabel.EMPTY
+        self._last_stable_confidence: float      = 1.0
 
     # ── Application lifecycle ──────────────────────────────────────────────
 
@@ -259,6 +269,27 @@ class FogApplication:
                     self._alert_active = False
                     self._alert_status = AlertStatus.IDLE
                     logger.info("[CONFIG] Vibration disabled - force stopping active alert")
+
+            # ── Smoothing & Confidence config ────────────────────────────────
+            if "min_confidence" in data:
+                val = max(0.0, min(1.0, float(data["min_confidence"])))
+                self._min_confidence = val
+                self._local_db.set_config("min_confidence", str(val))
+                logger.info(f"[CONFIG] min_confidence set to: {val:.0%}")
+
+            if "smoothing_window_size" in data:
+                val = max(1, int(data["smoothing_window_size"]))
+                self._smoothing_window_size = val
+                self._prediction_window = deque(self._prediction_window, maxlen=val)
+                self._local_db.set_config("smoothing_window_size", str(val))
+                logger.info(f"[CONFIG] smoothing_window_size set to: {val}")
+
+            if "smoothing_min_votes" in data:
+                val = max(1, int(data["smoothing_min_votes"]))
+                self._smoothing_min_votes = val
+                self._local_db.set_config("smoothing_min_votes", str(val))
+                logger.info(f"[CONFIG] smoothing_min_votes set to: {val}")
+
         except Exception as e:
             logger.error(f"Failed to parse config message: {e}")
 
@@ -332,11 +363,27 @@ class FogApplication:
         raw_fsr = self._preprocessor.extract_raw(sensors)
 
         # Step 4 – AI inference (11 labels)
-        posture, confidence = self._inference.predict(raw_fsr)
-        
-        # Log every prediction for debugging visibility
+        posture_raw, confidence_raw = self._inference.predict(raw_fsr)
         total_p = int(raw_fsr.sum())
-        logger.info(f"[AI] Prediction: {posture.value} (conf: {confidence:.2f}, total_p: {total_p})")
+
+        # Step 4a – Confidence filter: reject predictions below threshold
+        if confidence_raw >= self._min_confidence:
+            logger.info(
+                f"[AI] ✅ {posture_raw.value} | conf={confidence_raw:.2%} "
+                f"(>={self._min_confidence:.0%}) | total_p={total_p}"
+            )
+            # Step 4b – Feed confident prediction into smoothing window
+            self._prediction_window.append(posture_raw.value)
+            posture = self._apply_smoothing()
+        else:
+            logger.info(
+                f"[AI] ⚠️  {posture_raw.value} | conf={confidence_raw:.2%} "
+                f"(< threshold {self._min_confidence:.0%}) | total_p={total_p} "
+                f"→ rejected, holding: {self._last_stable_posture.value}"
+            )
+            posture = self._last_stable_posture
+
+        confidence = confidence_raw
 
         # Step 5 – Derive occupancy from label (no temperature logic)
         occupancy = occupancy_from_label(posture)
@@ -488,6 +535,46 @@ class FogApplication:
             f"alert={self._alert_active}, ws_clients={self._ws_server.connected_count}"
         )
 
+    # ── Smoothing ──────────────────────────────────────────────────────────
+
+    def _apply_smoothing(self) -> PostureLabel:
+        """
+        Temporal smoothing via majority vote over a sliding window.
+
+        Only predictions that pass the confidence filter are added to the
+        window.  A posture is "confirmed" (stable) when one label reaches
+        `_smoothing_min_votes` votes out of the last window entries.
+        Until consensus is reached the previous stable posture is returned.
+        """
+        if not self._prediction_window:
+            return self._last_stable_posture
+
+        counts              = Counter(self._prediction_window)
+        top_label_str, top_count = counts.most_common(1)[0]
+        win_size            = len(self._prediction_window)
+
+        # Map string label back to PostureLabel enum
+        try:
+            top_label = PostureLabel(top_label_str)
+        except ValueError:
+            return self._last_stable_posture
+
+        if top_count >= self._smoothing_min_votes:
+            if top_label != self._last_stable_posture:
+                logger.info(
+                    f"[SMOOTH] ✅ Confirmed: {top_label.value} "
+                    f"({top_count}/{win_size} votes)"
+                )
+            self._last_stable_posture    = top_label
+            self._last_stable_confidence = top_count / win_size
+        else:
+            logger.debug(
+                f"[SMOOTH] ⏳ {top_label.value} {top_count}/{self._smoothing_min_votes} votes "
+                f"→ holding {self._last_stable_posture.value}"
+            )
+
+        return self._last_stable_posture
+
     # ── Shutdown ───────────────────────────────────────────────────────────
 
     def _request_shutdown(self) -> None:
@@ -496,8 +583,7 @@ class FogApplication:
 
     # ── Banner ─────────────────────────────────────────────────────────────
 
-    @staticmethod
-    def _print_banner() -> None:
+    def _print_banner(self) -> None:
         border = "=" * 58
         logger.info(border)
         logger.info("  Smart Cushion Fog Node")
@@ -506,6 +592,9 @@ class FogApplication:
         logger.info(f"  AI Model     : {settings.model_path}")
         logger.info(f"  Scaler       : {settings.scaler_path}")
         logger.info(f"  Cloud Sync   : {'ENABLED' if settings.cloud_enabled else 'disabled'}")
+        logger.info(f"  Min Conf.    : {self._min_confidence:.0%}  |  "
+                    f"Window: {self._smoothing_window_size} frames "
+                    f"(min {self._smoothing_min_votes} votes to confirm)")
         logger.info(border)
 
 
