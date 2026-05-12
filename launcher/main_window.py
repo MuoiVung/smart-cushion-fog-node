@@ -273,6 +273,7 @@ class FogLauncherApp(ctk.CTk):
         self._build_status_panel(row1)
 
         self._build_model_panel(self._view_config)
+        self._build_smoothing_panel(self._view_config)
         self._build_cloud_queue_panel(self._view_config)
 
     def _build_monitor_view(self) -> None:
@@ -488,10 +489,164 @@ class FogLauncherApp(ctk.CTk):
 
     # ── Data Monitor ──────────────────────────────────────────────────────────
 
+    # ── AI Prediction Quality (Smoothing + Confidence) ─────────────────────
+
+    def _build_smoothing_panel(self, parent) -> None:
+        """Panel for configuring AI confidence threshold and temporal smoothing."""
+        frame = ctk.CTkFrame(parent, fg_color=COLOR["surface"], corner_radius=12)
+        frame.grid(row=2, column=0, sticky="ew", padx=16, pady=(12, 0))
+        frame.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(
+            frame, text="AI PREDICTION QUALITY",
+            font=ctk.CTkFont(size=10, weight="bold"),
+            text_color=COLOR["muted"],
+        ).grid(row=0, column=0, columnspan=4, padx=16, pady=(14, 6), sticky="w")
+
+        # Helper to create a labelled row with tooltip-like description
+        def _add_row(row_idx, label, desc, var, unit=""):
+            ctk.CTkLabel(
+                frame, text=label,
+                font=ctk.CTkFont(size=12, weight="bold"), text_color=COLOR["text"],
+            ).grid(row=row_idx, column=0, padx=16, pady=(6, 0), sticky="w")
+            ctk.CTkLabel(
+                frame, text=desc,
+                font=ctk.CTkFont(size=10), text_color=COLOR["muted"],
+                wraplength=380, justify="left",
+            ).grid(row=row_idx + 1, column=0, padx=16, pady=(0, 4), sticky="w")
+            entry = ctk.CTkEntry(
+                frame, textvariable=var, width=80, height=30,
+                font=ctk.CTkFont(size=12),
+            )
+            entry.grid(row=row_idx, column=1, padx=(8, 4), pady=(6, 0), sticky="w")
+            if unit:
+                ctk.CTkLabel(frame, text=unit, font=ctk.CTkFont(size=11),
+                             text_color=COLOR["muted"]).grid(
+                    row=row_idx, column=2, padx=(0, 16), sticky="w")
+            return entry
+
+        # Min Confidence
+        self._smooth_conf_var = ctk.StringVar(
+            value=self._db.get_config("min_confidence", "0.70")
+        )
+        _add_row(
+            1,
+            "Min Confidence",
+            "Reject AI predictions below this threshold (0.0 – 1.0).\n"
+            "Low-confidence frames are skipped; last accepted posture is held.",
+            self._smooth_conf_var,
+            unit="(0.0–1.0)",
+        )
+
+        # Smoothing Window Size
+        self._smooth_window_var = ctk.StringVar(
+            value=self._db.get_config("smoothing_window_size", "10")
+        )
+        _add_row(
+            3,
+            "Window Size",
+            "Number of recent predictions kept in memory for voting.\n"
+            "E.g. 10 = last 5 seconds at 0.5 s/frame. Larger = slower reaction.",
+            self._smooth_window_var,
+            unit="frames",
+        )
+
+        # Min Votes
+        self._smooth_votes_var = ctk.StringVar(
+            value=self._db.get_config("smoothing_min_votes", "7")
+        )
+        _add_row(
+            5,
+            "Min Votes to Confirm",
+            "Out of the Window Size frames, how many must agree on the same\n"
+            "posture before it is accepted. Aim for 70-80 % of Window Size.",
+            self._smooth_votes_var,
+            unit="votes",
+        )
+
+        # Status label
+        self._smooth_status_lbl = ctk.CTkLabel(
+            frame, text="",
+            font=ctk.CTkFont(size=11), text_color=COLOR["green"],
+        )
+        self._smooth_status_lbl.grid(row=7, column=0, columnspan=4, padx=16, pady=(4, 2), sticky="w")
+
+        # Apply button
+        ctk.CTkButton(
+            frame,
+            text="Apply  (hot-update via MQTT)",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color=COLOR["blue"], hover_color="#1f6feb",
+            text_color="#0d1117", corner_radius=8, height=32,
+            command=self._on_apply_smoothing,
+        ).grid(row=8, column=0, columnspan=4, padx=16, pady=(4, 14), sticky="w")
+
+    def _on_apply_smoothing(self) -> None:
+        """Validate and hot-send smoothing config via MQTT; persist to LocalDB."""
+        errors = []
+        try:
+            conf = float(self._smooth_conf_var.get().strip())
+            if not (0.0 <= conf <= 1.0):
+                raise ValueError
+        except ValueError:
+            errors.append("Min Confidence must be a number between 0.0 and 1.0")
+            conf = None
+
+        try:
+            window = int(self._smooth_window_var.get().strip())
+            if window < 1:
+                raise ValueError
+        except ValueError:
+            errors.append("Window Size must be a whole number ≥ 1")
+            window = None
+
+        try:
+            votes = int(self._smooth_votes_var.get().strip())
+            if votes < 1:
+                raise ValueError
+        except ValueError:
+            errors.append("Min Votes must be a whole number ≥ 1")
+            votes = None
+
+        if errors:
+            self._smooth_status_lbl.configure(
+                text="⚠️  " + "  |  ".join(errors), text_color=COLOR["red"]
+            )
+            return
+
+        # Persist to LocalDB (survives restarts)
+        self._db.set_config("min_confidence",       str(conf))
+        self._db.set_config("smoothing_window_size", str(window))
+        self._db.set_config("smoothing_min_votes",   str(votes))
+
+        # Hot-update running Fog Node via MQTT (no restart needed)
+        if self._mqtt_connected:
+            payload = {"min_confidence": conf, "smoothing_window_size": window,
+                       "smoothing_min_votes": votes}
+            import json as _json
+            self._mqtt_monitor._client.publish(
+                "cushion/fog/config", _json.dumps(payload), qos=1
+            )
+            self._smooth_status_lbl.configure(
+                text=f"✅ Applied: conf={conf:.0%} | window={window} | votes={votes}",
+                text_color=COLOR["green"]
+            )
+            self._log_console(
+                f"Smoothing updated — conf={conf:.0%}, window={window}, votes={votes}"
+            )
+        else:
+            self._smooth_status_lbl.configure(
+                text="ℹ️  Saved to DB. Will take effect on next Fog Node start.",
+                text_color=COLOR["yellow"]
+            )
+            self._log_console("Smoothing saved to LocalDB (Fog Node not connected)")
+
+    # ── Cloud Queue ──────────────────────────────────────────────────────
+
     def _build_cloud_queue_panel(self, parent) -> None:
         """Cloud Queue management panel shown in Config & Control view."""
         frame = ctk.CTkFrame(parent, fg_color=COLOR["surface"], corner_radius=12)
-        frame.grid(row=2, column=0, sticky="ew", padx=16, pady=(12, 16))
+        frame.grid(row=3, column=0, sticky="ew", padx=16, pady=(12, 16))
         frame.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(
