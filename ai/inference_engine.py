@@ -185,8 +185,8 @@ class InferenceEngine:
 
         # ── Step 2: Run AI Inference ────────────────────────────────────────
         if self._use_stub:
-            l, c = self._rule_based_predict(raw_sensors)
-            return l, c, [{"label": l.value, "confidence": c}]
+            l, c, t3 = self._rule_based_predict(raw_sensors)
+            return l, c, t3
 
         return self._keras_predict(raw_sensors)
 
@@ -248,9 +248,12 @@ class InferenceEngine:
             return label, round(confidence, 4), top_3
 
         except Exception as exc:
+            import traceback
+            err_msg = traceback.format_exc()
+            with open("predict_error.log", "a") as f:
+                f.write(err_msg + "\n")
             logger.error(f"Keras inference failed: {exc}. Falling back to rule-based.")
-            l, c = self._rule_based_predict(raw_sensors)
-            return l, c, [{"label": l.value, "confidence": c}]
+            return self._rule_based_predict(raw_sensors)
 
     # ── Private: model loading ─────────────────────────────────────────────
 
@@ -261,12 +264,11 @@ class InferenceEngine:
 
         if not model_ok or not scaler_ok:
             missing = []
-            if not model_ok:  missing.append(str(self._model_path))
-            if not scaler_ok: missing.append(str(self._scaler_path))
-            logger.warning(
-                f"AI model file(s) not found: {missing}. "
-                "Falling back to rule-based classifier. "
-                "Copy smart_cushion_model.h5 and fsr_scaler.pkl to ai/models/."
+            if not model_ok:  missing.append(str(self._model_path.absolute()))
+            if not scaler_ok: missing.append(str(self._scaler_path.absolute()))
+            logger.error(
+                f"❌ AI MODEL NOT FOUND! Checked paths: {missing}. "
+                "Falling back to [HEURISTIC] mode. Please check your .env file."
             )
             self._use_stub = True
             return
@@ -290,8 +292,12 @@ class InferenceEngine:
                     f"Keras {output_units}-class CNN loaded from '{self._model_path}'"
                 )
         except Exception as exc:
+            import traceback
+            err_msg = traceback.format_exc()
+            with open("model_load_error.log", "w") as f:
+                f.write(err_msg)
             logger.error(
-                f"Failed to load Keras model: {exc}. Falling back to rule-based classifier."
+                f"Failed to load Keras model: {exc}. Falling back to rule-based classifier. Check model_load_error.log"
             )
             self._model  = None
             self._scaler = None
@@ -300,7 +306,7 @@ class InferenceEngine:
     # ── Private: rule-based fallback ───────────────────────────────────────
 
     @staticmethod
-    def _rule_based_predict(raw_sensors: np.ndarray) -> Tuple[PostureLabel, float]:
+    def _rule_based_predict(raw_sensors: np.ndarray) -> Tuple[PostureLabel, float, list[dict]]:
         """
         Heuristic posture classifier using FSR pressure symmetry.
 
@@ -345,4 +351,10 @@ class InferenceEngine:
             confidence = max(0.40, 0.85 - max(abs_lr, abs_fb))
 
         logger.debug(f"Rule-based prediction: {label.value} (confidence={confidence:.3f})")
-        return label, round(confidence, 4)
+        
+        # Simulated top-3 for heuristic
+        top_3 = [{"label": label.value, "confidence": round(confidence, 4)}]
+        # Add a placeholder for others to show it's heuristic
+        top_3.append({"label": "[Heuristic]", "confidence": 0.0})
+        
+        return label, round(confidence, 4), top_3
