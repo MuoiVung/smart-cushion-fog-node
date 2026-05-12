@@ -53,6 +53,8 @@ class PostureLabel(str, Enum):
     CLL  = "CLL"   # Cross-Left Legged
     CRLL = "CRLL"  # Cross-Right Legged-Legged
     CLLL = "CLLL"  # Cross-Left Legged-Legged
+    UNKNOWN = "UNKNOWN" # Unknown or error state
+
 
 
 # Only NUP is a correct seated posture (no vibration alert)

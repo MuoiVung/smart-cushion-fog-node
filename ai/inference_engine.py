@@ -20,6 +20,7 @@ Integrates the trained Keras CNN model from smart-cushion-AI:
   │      8      │  CLL         │ Cross-Left Legged                     │
   │      9      │  CRLL        │ Cross-Right Legged-Legged             │
   │     10      │  CLLL        │ Cross-Left Legged-Legged              │
+  │     11      │  UNKNOWN     │ Unknown or error state                │
   └─────────────────────────────────────────────────────────────────────┘
 
 Current trained model (smart_cushion_model.h5):
@@ -184,10 +185,6 @@ class InferenceEngine:
             return PostureLabel.EMPTY, 1.0, [{"label": "empty", "confidence": 1.0}]
 
         # ── Step 2: Run AI Inference ────────────────────────────────────────
-        if self._use_stub:
-            l, c, t3 = self._rule_based_predict(raw_sensors)
-            return l, c, t3
-
         return self._keras_predict(raw_sensors)
 
     # ── Private: Keras CNN inference ───────────────────────────────────────
@@ -200,6 +197,9 @@ class InferenceEngine:
           raw ADC (9,) → MinMaxScaler → reshape(1, 3, 3, 1) → CNN → sigmoid score
         """
         try:
+            if self._scaler is None or self._model is None:
+                raise ValueError("Model or Scaler not loaded.")
+
             import pandas as pd
 
             fsr_cols = [
@@ -248,12 +248,19 @@ class InferenceEngine:
             return label, round(confidence, 4), top_3
 
         except Exception as exc:
+            if self._scaler is None or self._model is None:
+                error_text = "❌ AI INFERENCE ERROR: Model or Scaler not loaded."
+            else:
+                error_text = f"❌ AI INFERENCE CRITICAL ERROR: {exc}"
+            
             import traceback
             err_msg = traceback.format_exc()
             with open("predict_error.log", "a") as f:
                 f.write(err_msg + "\n")
-            logger.error(f"Keras inference failed: {exc}. Falling back to rule-based.")
-            return self._rule_based_predict(raw_sensors)
+            
+            logger.error(error_text)
+            print(error_text)  # Ensure it prints to stdout for the launcher console log
+            return PostureLabel.UNKNOWN, 0.0, []
 
     # ── Private: model loading ─────────────────────────────────────────────
 
@@ -266,10 +273,12 @@ class InferenceEngine:
             missing = []
             if not model_ok:  missing.append(str(self._model_path.absolute()))
             if not scaler_ok: missing.append(str(self._scaler_path.absolute()))
-            logger.error(
-                f"❌ AI MODEL NOT FOUND! Checked paths: {missing}. "
-                "Falling back to [HEURISTIC] mode. Please check your .env file."
+            error_text = (
+                f"❌ CRITICAL: AI MODEL FILES MISSING! Checked: {missing}. "
+                "System will NOT provide accurate predictions."
             )
+            logger.error(error_text)
+            print(error_text)
             self._use_stub = True
             return
 
@@ -296,65 +305,67 @@ class InferenceEngine:
             err_msg = traceback.format_exc()
             with open("model_load_error.log", "w") as f:
                 f.write(err_msg)
-            logger.error(
-                f"Failed to load Keras model: {exc}. Falling back to rule-based classifier. Check model_load_error.log"
-            )
+            error_text = f"❌ FAILED TO LOAD AI MODEL: {exc}. Check model_load_error.log"
+            logger.error(error_text)
+            print(error_text)
             self._model  = None
             self._scaler = None
             self._use_stub = True
 
+
     # ── Private: rule-based fallback ───────────────────────────────────────
 
-    @staticmethod
-    def _rule_based_predict(raw_sensors: np.ndarray) -> Tuple[PostureLabel, float, list[dict]]:
-        """
-        Heuristic posture classifier using FSR pressure symmetry.
+    # @staticmethod
+    # def _rule_based_predict(raw_sensors: np.ndarray) -> Tuple[PostureLabel, float, list[dict]]:
+    #     """
+    #     Heuristic posture classifier using FSR pressure symmetry.
+    # 
+    #     Uses raw ADC values directly (normalisation done internally).
+    #     Returns one of: NUP, LF, LB, LFSR, LFSL  (simplified 5-label subset).
+    #     CRLL / CLLL / CRL / CLL require training data to distinguish reliably.
+    #     """
+    #     fl, fm, fr, ml, mm, mr, bl, bm, br = raw_sensors.tolist()
+    #     total = fl + fm + fr + ml + mm + mr + bl + bm + br
+    # 
+    #     if total < 1:
+    #         return PostureLabel.NUP, 0.50
+    # 
+    #     # Relative proportion per sensor
+    #     left  = (fl + ml + bl) / total
+    #     right = (fr + mr + br) / total
+    #     front = (fl + fm + fr) / total
+    #     back  = (bl + bm + br) / total
+    # 
+    #     lr_diff = left  - right
+    #     fb_diff = front - back
+    # 
+    #     THRESHOLD = 0.15
+    # 
+    #     abs_lr = abs(lr_diff)
+    #     abs_fb = abs(fb_diff)
+    # 
+    #     if abs_lr >= abs_fb and abs_lr > THRESHOLD:
+    #         if lr_diff > 0:
+    #             label = PostureLabel.LFSL   # more pressure left → lean fwd-support left
+    #         else:
+    #             label = PostureLabel.LFSR   # more pressure right
+    #         confidence = min(0.90, 0.45 + abs_lr)
+    #     elif abs_fb > abs_lr and abs_fb > THRESHOLD:
+    #         if fb_diff > 0:
+    #             label = PostureLabel.LF     # more pressure front → lean forward
+    #         else:
+    #             label = PostureLabel.LB     # more pressure back → lean backward
+    #         confidence = min(0.90, 0.45 + abs_fb)
+    #     else:
+    #         label      = PostureLabel.NUP
+    #         confidence = max(0.40, 0.85 - max(abs_lr, abs_fb))
+    # 
+    #     logger.debug(f"Rule-based prediction: {label.value} (confidence={confidence:.3f})")
+    #     
+    #     # Simulated top-3 for heuristic
+    #     top_3 = [{"label": label.value, "confidence": round(confidence, 4)}]
+    #     # Add a placeholder for others to show it's heuristic
+    #     top_3.append({"label": "[Heuristic]", "confidence": 0.0})
+    #     
+    #     return label, round(confidence, 4), top_3
 
-        Uses raw ADC values directly (normalisation done internally).
-        Returns one of: NUP, LF, LB, LFSR, LFSL  (simplified 5-label subset).
-        CRLL / CLLL / CRL / CLL require training data to distinguish reliably.
-        """
-        fl, fm, fr, ml, mm, mr, bl, bm, br = raw_sensors.tolist()
-        total = fl + fm + fr + ml + mm + mr + bl + bm + br
-
-        if total < 1:
-            return PostureLabel.NUP, 0.50
-
-        # Relative proportion per sensor
-        left  = (fl + ml + bl) / total
-        right = (fr + mr + br) / total
-        front = (fl + fm + fr) / total
-        back  = (bl + bm + br) / total
-
-        lr_diff = left  - right
-        fb_diff = front - back
-
-        THRESHOLD = 0.15
-
-        abs_lr = abs(lr_diff)
-        abs_fb = abs(fb_diff)
-
-        if abs_lr >= abs_fb and abs_lr > THRESHOLD:
-            if lr_diff > 0:
-                label = PostureLabel.LFSL   # more pressure left → lean fwd-support left
-            else:
-                label = PostureLabel.LFSR   # more pressure right
-            confidence = min(0.90, 0.45 + abs_lr)
-        elif abs_fb > abs_lr and abs_fb > THRESHOLD:
-            if fb_diff > 0:
-                label = PostureLabel.LF     # more pressure front → lean forward
-            else:
-                label = PostureLabel.LB     # more pressure back → lean backward
-            confidence = min(0.90, 0.45 + abs_fb)
-        else:
-            label      = PostureLabel.NUP
-            confidence = max(0.40, 0.85 - max(abs_lr, abs_fb))
-
-        logger.debug(f"Rule-based prediction: {label.value} (confidence={confidence:.3f})")
-        
-        # Simulated top-3 for heuristic
-        top_3 = [{"label": label.value, "confidence": round(confidence, 4)}]
-        # Add a placeholder for others to show it's heuristic
-        top_3.append({"label": "[Heuristic]", "confidence": 0.0})
-        
-        return label, round(confidence, 4), top_3

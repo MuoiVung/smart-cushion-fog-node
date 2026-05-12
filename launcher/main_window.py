@@ -1009,10 +1009,24 @@ class FogLauncherApp(ctk.CTk):
                 )
                 return
 
+            # Convert to relative paths if within project root for Docker compatibility
+            try:
+                rel_model = Path(model_path).relative_to(PROJECT_ROOT)
+                model_path = str(rel_model)
+            except ValueError:
+                pass # Not within project root, keep absolute
+                
+            try:
+                rel_scaler = Path(scaler_path).relative_to(PROJECT_ROOT)
+                scaler_path = str(rel_scaler)
+            except ValueError:
+                pass # Not within project root, keep absolute
+
             # Persist to DB (sole source of truth for model paths)
             self._db.set_config("model_path",  model_path)
             self._db.set_config("scaler_path", scaler_path)
-            self._log_console(f"Config saved → {Path(model_path).name} + {Path(scaler_path).name}")
+            self._log_console(f"Config saved (relative) → {model_path}")
+
 
             # Hot-reload if MQTT is live (no Docker restart needed!)
             if self._mqtt_connected:

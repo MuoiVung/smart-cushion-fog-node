@@ -323,9 +323,11 @@ class FogApplication:
                 return
 
             logger.info(f"[HOT-RELOAD] Swapping model → {mp.name} + {sp.name}")
+            print(f"🔥 [HOT-RELOAD] Swapping model → {mp.name} + {sp.name}")
             success = self._inference.reload(str(mp), str(sp))
             if not success:
                 logger.warning("[HOT-RELOAD] Swap failed — previous model still active")
+                print("⚠️ [HOT-RELOAD] Swap failed — previous model still active")
 
         except Exception as e:
             logger.error(f"[HOT-RELOAD] Unexpected error: {e}")
@@ -368,20 +370,23 @@ class FogApplication:
 
         # Step 4a – Confidence filter: reject predictions below threshold
         if confidence_raw >= self._min_confidence:
-            logger.info(
+            log_msg = (
                 f"[AI] ✅ {posture_raw.value} | conf={confidence_raw:.2%} "
                 f"(>={self._min_confidence:.0%}) | total_p={total_p}"
             )
+            logger.info(log_msg)
             # Step 4b – Feed confident prediction into smoothing window
             self._prediction_window.append(posture_raw.value)
             posture = self._apply_smoothing()
         else:
-            logger.info(
+            log_msg = (
                 f"[AI] ⚠️  {posture_raw.value} | conf={confidence_raw:.2%} "
                 f"(< threshold {self._min_confidence:.0%}) | total_p={total_p} "
                 f"→ rejected, holding: {self._last_stable_posture.value}"
             )
+            logger.info(log_msg)
             posture = self._last_stable_posture
+
 
         confidence = confidence_raw
 

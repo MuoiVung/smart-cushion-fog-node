@@ -71,8 +71,11 @@ class DockerManager:
 
         self._running   = False
         self._poll_thread: Optional[threading.Thread] = None
+        self._log_threads: list[threading.Thread] = []
+        self._log_processes: list[subprocess.Popen] = []
 
         self._native_mode = not self.is_docker_available()
+
         self._ngrok_process: Optional[subprocess.Popen] = None
         self._ngrok_url: Optional[str] = None
         self._native_app_process: Optional[subprocess.Popen] = None
@@ -186,6 +189,7 @@ class DockerManager:
                     stream_log=True,
                 )
                 self._log("✅ Docker services started successfully")
+                self._start_container_logs()
                 self._start_polling()
         except Exception as exc:
             self._log(f"❌ Failed to start services: {exc}")
@@ -204,6 +208,7 @@ class DockerManager:
                     
                 self._log("🛑 Native Python & Mosquitto services stopped")
             else:
+                self._stop_container_logs()
                 self._run_compose(["down"], stream_log=True)
                 self._log("🛑 Docker services stopped")
 
@@ -261,6 +266,67 @@ class DockerManager:
         process.wait()
         if process.returncode != 0:
             raise Exception(f"Command failed with exit code {process.returncode}")
+
+    def _start_container_logs(self) -> None:
+        """Start streaming logs from running containers."""
+        if self._native_mode:
+            return
+
+        def stream_container(service_name: str, prefix: str):
+            try:
+                proc = subprocess.Popen(
+                    ["docker", "compose", "logs", "-f", "--tail", "50", service_name],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    cwd=str(self._root)
+                )
+                self._log_processes.append(proc)
+                if proc.stdout:
+                    for line in proc.stdout:
+                        stripped = line.rstrip()
+                        if stripped:
+                            # Clean up docker log prefixes like "fog-node-1  |"
+                            if "|" in stripped:
+                                content = stripped.split("|", 1)[1].strip()
+                            else:
+                                content = stripped
+                            # Filter: only show important logs in the console
+                            # Hide routine AI predictions and MQTT debug logs
+                            upper_content = content.upper()
+                            is_important = any(word in upper_content for word in [
+                                "ERROR", "CRITICAL", "FAILED", "WARNING", "SUCCESS", 
+                                "READY", "STARTING", "STOPPED", "CONNECTED", "RELOADING", 
+                                "HOT-RELOAD", "🔥", "❌", "✅", "🚀", "⚠️"
+                            ])
+                            
+                            # Specifically exclude routine AI predictions to keep console clean
+                            if "[AI] ✅" in content or "[AI] ⚠️" in content:
+                                is_important = False
+                            
+                            if is_important or "SYSTEM READY" in upper_content:
+                                self._log(f"[{prefix}] {content}")
+
+            except Exception as e:
+                self._log(f"⚠️ Log streaming failed for {service_name}: {e}")
+
+        # Stream Fog Node and Mosquitto
+        t1 = threading.Thread(target=stream_container, args=("fog-node", "FOG"), daemon=True)
+        t2 = threading.Thread(target=stream_container, args=("mosquitto", "MQTT-SVC"), daemon=True)
+        t1.start()
+        t2.start()
+        self._log_threads.extend([t1, t2])
+
+    def _stop_container_logs(self) -> None:
+        """Terminate log streaming processes."""
+        for proc in self._log_processes:
+            try:
+                proc.terminate()
+            except:
+                pass
+        self._log_processes.clear()
+        self._log_threads.clear()
+
 
     # ── Ngrok Management ───────────────────────────────────────────────────
 
