@@ -212,6 +212,7 @@ class FogRealtimeUpdate(BaseModel):
     good_posture_pct:       int            = Field(default=0, ge=0, le=100)
     posture_distribution:   dict[str, int] = Field(default_factory=dict)
     sensors_heatmap_pct:    list[float]    = Field(default_factory=lambda: [0.0] * 9)
+    posture_top3:           list[dict]    = Field(default_factory=list)
     sensors:                dict           = Field(default_factory=dict)
 
 

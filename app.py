@@ -363,7 +363,7 @@ class FogApplication:
         raw_fsr = self._preprocessor.extract_raw(sensors)
 
         # Step 4 – AI inference (11 labels)
-        posture_raw, confidence_raw = self._inference.predict(raw_fsr)
+        posture_raw, confidence_raw, top_3 = self._inference.predict(raw_fsr)
         total_p = int(raw_fsr.sum())
 
         # Step 4a – Confidence filter: reject predictions below threshold
@@ -525,6 +525,7 @@ class FogApplication:
             good_posture_pct=self._session_manager.get_good_posture_pct(),
             posture_distribution=self._session_manager.get_posture_distribution(),
             sensors_heatmap_pct=sensors.as_heatmap_pct(),
+            posture_top3=top_3,
             sensors=sensors.model_dump(),
         )
         payload = broadcast.model_dump()

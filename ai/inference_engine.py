@@ -163,7 +163,7 @@ class InferenceEngine:
         logger.info(f"[HOT-RELOAD] ✅ Model swapped: {self._model_path.name} + {self._scaler_path.name}")
         return True
 
-    def predict(self, raw_sensors: np.ndarray) -> Tuple[PostureLabel, float]:
+    def predict(self, raw_sensors: np.ndarray) -> Tuple[PostureLabel, float, list[dict]]:
         """
         Predict an 11-label posture/state from raw FSR sensor values.
 
@@ -173,23 +173,26 @@ class InferenceEngine:
                          NOTE: raw values (not normalised) — scaler handles this.
 
         Returns:
-            Tuple of (PostureLabel, confidence) where confidence ∈ [0.0, 1.0].
+            Tuple of (PostureLabel, confidence, top_3)
+            - confidence: float ∈ [0.0, 1.0].
+            - top_3: list of {"label": str, "confidence": float} sorted by confidence desc.
         """
         # ── Step 1: Empty Detection (Heuristic) ─────────────────────────────
         # If total pressure is very low, it's definitely empty.
         total_pressure = float(np.sum(raw_sensors))
-        if total_pressure < _EMPTY_THRESHOLD:
-            return PostureLabel.EMPTY, 1.0
+        if total_pressure < 200:
+            return PostureLabel.EMPTY, 1.0, [{"label": "empty", "confidence": 1.0}]
 
         # ── Step 2: Run AI Inference ────────────────────────────────────────
         if self._use_stub:
-            return self._rule_based_predict(raw_sensors)
+            l, c = self._rule_based_predict(raw_sensors)
+            return l, c, [{"label": l.value, "confidence": c}]
 
         return self._keras_predict(raw_sensors)
 
     # ── Private: Keras CNN inference ───────────────────────────────────────
 
-    def _keras_predict(self, raw_sensors: np.ndarray) -> Tuple[PostureLabel, float]:
+    def _keras_predict(self, raw_sensors: np.ndarray) -> Tuple[PostureLabel, float, list[dict]]:
         """
         Run the Keras CNN model (currently binary, maps to 11-class output).
 
@@ -221,24 +224,33 @@ class InferenceEngine:
                     label      = _BINARY_NEG_LABEL
                     confidence = 1.0 - score
                 logger.debug(f"Keras binary prediction: {label.value} (score={score:.4f})")
+                top_3 = [{"label": label.value, "confidence": round(confidence, 4)}]
             else:
                 # Multi-class: find index with highest probability
                 predicted_idx = int(np.argmax(predictions))
                 confidence    = float(predictions[predicted_idx])
                 
                 # Use appropriate label list based on output count
-                if len(predictions) == 9:
-                    label = POSTURE_LABELS_9[predicted_idx]
-                else:
-                    label = POSTURE_LABELS_11[predicted_idx]
+                labels = POSTURE_LABELS_9 if len(predictions) == 9 else POSTURE_LABELS_11
+                label = labels[predicted_idx]
+
+                # Get top 3
+                top_indices = np.argsort(predictions)[-3:][::-1]
+                top_3 = []
+                for idx in top_indices:
+                    top_3.append({
+                        "label": labels[int(idx)].value,
+                        "confidence": float(round(predictions[idx], 4))
+                    })
                 
                 logger.debug(f"Keras multi-class prediction: {label.value} (idx={predicted_idx}, conf={confidence:.3f})")
 
-            return label, round(confidence, 4)
+            return label, round(confidence, 4), top_3
 
         except Exception as exc:
             logger.error(f"Keras inference failed: {exc}. Falling back to rule-based.")
-            return self._rule_based_predict(raw_sensors)
+            l, c = self._rule_based_predict(raw_sensors)
+            return l, c, [{"label": l.value, "confidence": c}]
 
     # ── Private: model loading ─────────────────────────────────────────────
 
@@ -270,7 +282,7 @@ class InferenceEngine:
                 self._is_binary = True
                 logger.info(
                     f"Keras binary CNN loaded from '{self._model_path}' "
-                    f"(maps to NUP / LF for now — retrain with 11 classes for full support)"
+                    "(maps to NUP / LF for now — retrain with 11 classes for full support)"
                 )
             else:
                 self._is_binary = False

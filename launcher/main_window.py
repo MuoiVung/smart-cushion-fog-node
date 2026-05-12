@@ -1218,11 +1218,26 @@ class FogLauncherApp(ctk.CTk):
                 if ai_pnl:
                     posture = payload_dict.get("posture", "Unknown")
                     conf = payload_dict.get("confidence", 0.0)
-                    # total_p might be nested in sensors if using the latest schema
+                    top3 = payload_dict.get("posture_top3", [])
                     sensors = payload_dict.get("sensors", {})
                     total_p = sum(v for v in sensors.values() if isinstance(v, (int, float)))
                     
-                    line = f"[{msg.timestamp}]  {posture.upper():<10} | Conf: {conf:.2f} | Pressure: {total_p}\n"
+                    # Header for the entry
+                    line = f"[{msg.timestamp}] 🧠 AI PREDICTION\n"
+                    
+                    # Show top 3 candidates
+                    for i, item in enumerate(top3):
+                        label_str = item.get("label", "???").upper()
+                        c_val = item.get("confidence", 0.0)
+                        prefix = "  └─ " if i == 0 else "     "
+                        line += f"{prefix}{i+1}. {label_str:<6} ({c_val:.2%})"
+                        if label_str == posture.upper():
+                            line += " ⭐ SELECTED"
+                        line += "\n"
+                    
+                    line += f"     [Total Pressure: {total_p}]\n"
+                    line += "-" * 40 + "\n"
+                    
                     ai_pnl.configure(state="normal")
                     ai_pnl.insert("end", line)
                     ai_pnl.see("end")
