@@ -1216,26 +1216,32 @@ class FogLauncherApp(ctk.CTk):
                 # Update AI Predictions tab with a human-readable summary
                 ai_pnl = self._monitor_panels.get("ai_results")
                 if ai_pnl:
-                    posture = payload_dict.get("posture", "Unknown")
-                    conf = payload_dict.get("confidence", 0.0)
+                    posture_stable = payload_dict.get("posture", "Unknown")
+                    posture_raw = payload_dict.get("posture_raw", "Unknown")
                     top3 = payload_dict.get("posture_top3", [])
-                    sensors = payload_dict.get("sensors", {})
-                    total_p = sum(v for v in sensors.values() if isinstance(v, (int, float)))
                     
-                    # Header for the entry
-                    line = f"[{msg.timestamp}] 🧠 AI PREDICTION\n"
+                    # 1. Header with Raw AI Opinion
+                    line = f"[{msg.timestamp}] 🧠 AI OPINION: {posture_raw.upper()}\n"
                     
-                    # Show top 3 candidates
+                    # 2. Show candidates
                     for i, item in enumerate(top3):
                         label_str = item.get("label", "???").upper()
                         c_val = item.get("confidence", 0.0)
-                        prefix = "  └─ " if i == 0 else "     "
+                        prefix = "  ├─ " if i == 0 else "     "
                         line += f"{prefix}{i+1}. {label_str:<6} ({c_val:.2%})"
-                        if label_str == posture.upper():
-                            line += " ⭐ SELECTED"
+                        if label_str == posture_raw.upper():
+                            line += " ⚡" # Flash for raw frame hit
                         line += "\n"
                     
-                    line += f"     [Total Pressure: {total_p}]\n"
+                    # 3. Show Smoothing Status
+                    window_size = int(self._smooth_window_var.get())
+                    min_votes = int(self._smooth_votes_var.get())
+                    
+                    # Calculate votes for the stable posture in the current window (approx)
+                    # For a perfect UI we'd need to send the window counts, but we can 
+                    # derive if it's currently stable.
+                    status_icon = "✅" if posture_raw.upper() == posture_stable.upper() else "⏳"
+                    line += f"  {status_icon} STABLE: {posture_stable.upper()}\n"
                     line += "-" * 40 + "\n"
                     
                     ai_pnl.configure(state="normal")

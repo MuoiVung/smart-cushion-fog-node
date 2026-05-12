@@ -515,6 +515,7 @@ class FogApplication:
             session_start_time_iso=session_start_iso,
             occupancy_state=occupancy,
             posture=posture,
+            posture_raw=posture_raw,
             confidence=confidence,
             temperature=self._preprocessor.get_temperature(sensors),
             alert_active=self._alert_active,
