@@ -65,7 +65,7 @@ CHANNELS = [
     {"key": "fog_to_esp32",  "label": "📤  Fog → ESP32",   "color": COLOR["red"]},
     {"key": "fog_to_cloud",  "label": "☁️   Fog → Cloud",  "color": COLOR["purple"]},
     {"key": "fog_to_app",    "label": "📱  Fog → App",     "color": COLOR["green"]},
-    {"key": "ai_results",    "label": "🧠  AI Predictions", "color": COLOR["yellow"]},
+    {"key": "ai_results",    "label": "🧠  Dự đoán AI", "color": COLOR["yellow"]},
 ]
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -207,7 +207,7 @@ class FogLauncherApp(ctk.CTk):
 
         # Header Status
         self._header_status = ctk.CTkLabel(
-            sidebar, text="● Services stopped",
+            sidebar, text="● Dịch vụ đang dừng",
             font=ctk.CTkFont(size=12), text_color=COLOR["muted"]
         )
         self._header_status.grid(row=1, column=0, padx=20, pady=(0, 20))
@@ -225,28 +225,28 @@ class FogLauncherApp(ctk.CTk):
             btn.grid(row=row, column=0, padx=20, pady=5, sticky="ew")
             self._nav_buttons[name] = btn
 
-        make_nav("dashboard", "📊 Live Dashboard", 2)
-        make_nav("collector", "🎯 Data Collection", 3)
-        make_nav("config", "⚙️ Config & Control", 4)
-        make_nav("monitor", "📋 Logs & Raw Data", 5)
+        make_nav("dashboard", "📊 Bảng điều khiển", 2)
+        make_nav("collector", "🎯 Thu thập dữ liệu", 3)
+        make_nav("config", "⚙️ Cấu hình & Điều khiển", 4)
+        make_nav("monitor", "📋 Nhật ký & Dữ liệu", 5)
         
         # Start/Stop buttons in sidebar bottom
         self._start_btn = ctk.CTkButton(
-            sidebar, text="▶  Start Services", font=ctk.CTkFont(size=13, weight="bold"),
+            sidebar, text="▶  Bắt đầu dịch vụ", font=ctk.CTkFont(size=13, weight="bold"),
             fg_color=COLOR["green"], hover_color="#2ea043", text_color="#ffffff",
             command=self._on_start
         )
         self._start_btn.grid(row=7, column=0, padx=20, pady=10, sticky="ew")
 
         self._stop_btn = ctk.CTkButton(
-            sidebar, text="■  Stop Services", font=ctk.CTkFont(size=13, weight="bold"),
+            sidebar, text="■  Dừng dịch vụ", font=ctk.CTkFont(size=13, weight="bold"),
             fg_color="#cf222e", hover_color="#a40e26", text_color="#ffffff",
             state="disabled", command=self._on_stop
         )
         self._stop_btn.grid(row=8, column=0, padx=20, pady=10, sticky="ew")
 
         self._rebuild_btn = ctk.CTkButton(
-            sidebar, text="🔨  Rebuild Services", font=ctk.CTkFont(size=13, weight="bold"),
+            sidebar, text="🔨  Cấu trúc lại (Rebuild)", font=ctk.CTkFont(size=13, weight="bold"),
             fg_color=COLOR["muted"], hover_color="#484f58", text_color="#ffffff",
             command=self._on_rebuild
         )
@@ -318,7 +318,7 @@ class FogLauncherApp(ctk.CTk):
         frame.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(
-            frame, text="SYSTEM STATUS",
+            frame, text="TRẠNG THÁI HỆ THỐNG",
             font=ctk.CTkFont(size=10, weight="bold"),
             text_color=COLOR["muted"],
         ).grid(row=0, column=0, columnspan=2, padx=16, pady=(14, 6), sticky="w")
@@ -329,22 +329,22 @@ class FogLauncherApp(ctk.CTk):
         ctk.CTkLabel(frame, text="Mosquitto MQTT Broker",
                      text_color=COLOR["text"], font=ctk.CTkFont(size=12)
                      ).grid(row=1, column=1, sticky="w", pady=4)
-        self._lbl_mosquitto = ctk.CTkLabel(frame, text="Stopped", text_color=COLOR["muted"],
+        self._lbl_mosquitto = ctk.CTkLabel(frame, text="Đang dừng", text_color=COLOR["muted"],
                                             font=ctk.CTkFont(size=11))
         self._lbl_mosquitto.grid(row=1, column=2, padx=16)
 
         # Fog-node row
         self._dot_fog = ctk.CTkLabel(frame, text="●", text_color=COLOR["muted"], font=ctk.CTkFont(size=16))
         self._dot_fog.grid(row=2, column=0, padx=(16, 6))
-        ctk.CTkLabel(frame, text="Fog Node (AI Engine)",
+        ctk.CTkLabel(frame, text="Fog Node (Bộ xử lý AI)",
                      text_color=COLOR["text"], font=ctk.CTkFont(size=12)
                      ).grid(row=2, column=1, sticky="w", pady=4)
-        self._lbl_fog = ctk.CTkLabel(frame, text="Stopped", text_color=COLOR["muted"],
+        self._lbl_fog = ctk.CTkLabel(frame, text="Đang dừng", text_color=COLOR["muted"],
                                       font=ctk.CTkFont(size=11))
         self._lbl_fog.grid(row=2, column=2, padx=16)
 
         # Message counter
-        ctk.CTkLabel(frame, text="Messages received:",
+        ctk.CTkLabel(frame, text="Số tin nhắn nhận được:",
                      text_color=COLOR["muted"], font=ctk.CTkFont(size=11)
                      ).grid(row=3, column=0, columnspan=2, padx=16, pady=(6, 2), sticky="w")
         self._lbl_msg_count = ctk.CTkLabel(frame, text="0",
@@ -356,7 +356,7 @@ class FogLauncherApp(ctk.CTk):
         # Vibration Toggle (Always starts as OFF by default)
         self._vibration_enabled_var = ctk.BooleanVar(value=True)
         self._vibration_switch = ctk.CTkSwitch(
-            frame, text="Vibration Alerts",
+            frame, text="Rung cảnh báo",
             variable=self._vibration_enabled_var,
             onvalue=True, offvalue=False,
             font=ctk.CTkFont(size=12, weight="bold"),
@@ -384,7 +384,7 @@ class FogLauncherApp(ctk.CTk):
         frame.grid_columnconfigure(2, weight=1)
 
         ctk.CTkLabel(
-            frame, text="AI MODEL CONFIGURATION",
+            frame, text="CẤU HÌNH MÔ HÌNH AI",
             font=ctk.CTkFont(size=10, weight="bold"),
             text_color=COLOR["muted"],
         ).grid(row=0, column=0, columnspan=4, padx=16, pady=(14, 8), sticky="w")
@@ -393,14 +393,14 @@ class FogLauncherApp(ctk.CTk):
         self._model_mode = ctk.StringVar(value="keras")
 
         ctk.CTkRadioButton(
-            frame, text="Rule-based Stub  (no model needed)",
+            frame, text="Dựa trên quy tắc (Rule-based stub)",
             variable=self._model_mode, value="rule_based",
             font=ctk.CTkFont(size=12),
             command=self._on_model_mode_change,
         ).grid(row=1, column=0, padx=16, pady=4, sticky="w")
 
         ctk.CTkRadioButton(
-            frame, text="Keras Model  (.h5 / .keras)",
+            frame, text="Mô hình Keras (.h5 / .keras)",
             variable=self._model_mode, value="keras",
             font=ctk.CTkFont(size=13, weight="bold"),
             command=self._on_model_mode_change,
@@ -408,7 +408,7 @@ class FogLauncherApp(ctk.CTk):
 
         # ── Row 2: Model file (.h5) ───────────────────────────────────────
         ctk.CTkLabel(
-            frame, text="Model (.h5):",
+            frame, text="Mô hình (.h5):",
             font=ctk.CTkFont(size=11), text_color=COLOR["muted"],
         ).grid(row=2, column=0, padx=16, pady=4, sticky="e")
 
@@ -426,7 +426,7 @@ class FogLauncherApp(ctk.CTk):
         self._model_entry.grid(row=2, column=1, columnspan=2, padx=8, pady=4, sticky="ew")
 
         self._browse_btn = ctk.CTkButton(
-            frame, text="Browse…", width=80, height=32,
+            frame, text="Chọn…", width=80, height=32,
             fg_color=COLOR["surface"], border_color=COLOR["blue"],
             border_width=1, text_color=COLOR["blue"],
             hover_color="#1a2537", state="disabled",
@@ -436,7 +436,7 @@ class FogLauncherApp(ctk.CTk):
 
         # ── Row 3: Scaler file (.pkl) ─────────────────────────────────────
         ctk.CTkLabel(
-            frame, text="Scaler (.pkl):",
+            frame, text="Bộ chuẩn hóa (.pkl):",
             font=ctk.CTkFont(size=11), text_color=COLOR["muted"],
         ).grid(row=3, column=0, padx=16, pady=4, sticky="e")
 
@@ -454,7 +454,7 @@ class FogLauncherApp(ctk.CTk):
         self._scaler_entry.grid(row=3, column=1, columnspan=2, padx=8, pady=4, sticky="ew")
 
         self._scaler_browse_btn = ctk.CTkButton(
-            frame, text="Browse…", width=80, height=32,
+            frame, text="Chọn…", width=80, height=32,
             fg_color=COLOR["surface"], border_color=COLOR["blue"],
             border_width=1, text_color=COLOR["blue"],
             hover_color="#1a2537", state="disabled",
@@ -472,7 +472,7 @@ class FogLauncherApp(ctk.CTk):
 
         # ── Row 5: Apply / Hot-Reload button ─────────────────────────────
         self._apply_btn = ctk.CTkButton(
-            frame, text="Apply & Restart Fog Node",
+            frame, text="Áp dụng & Khởi động lại Fog Node",
             font=ctk.CTkFont(size=12, weight="bold"),
             fg_color=COLOR["blue"],
             hover_color="#1f6feb",
@@ -498,7 +498,7 @@ class FogLauncherApp(ctk.CTk):
         frame.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(
-            frame, text="AI PREDICTION QUALITY",
+            frame, text="CHẤT LƯỢNG DỰ ĐOÁN AI",
             font=ctk.CTkFont(size=10, weight="bold"),
             text_color=COLOR["muted"],
         ).grid(row=0, column=0, columnspan=4, padx=16, pady=(14, 6), sticky="w")
@@ -531,9 +531,9 @@ class FogLauncherApp(ctk.CTk):
         )
         _add_row(
             1,
-            "Min Confidence",
-            "Reject AI predictions below this threshold (0.0 – 1.0).\n"
-            "Low-confidence frames are skipped; last accepted posture is held.",
+            "Độ tin cậy tối thiểu",
+            "Từ chối các dự đoán AI có độ tin cậy thấp hơn ngưỡng này (0.0 – 1.0).\n"
+            "Các khung hình có độ tin cậy thấp sẽ bị bỏ qua; tư thế được chấp nhận gần nhất sẽ được giữ lại.",
             self._smooth_conf_var,
             unit="(0.0–1.0)",
         )
@@ -544,11 +544,11 @@ class FogLauncherApp(ctk.CTk):
         )
         _add_row(
             3,
-            "Window Size",
-            "Number of recent predictions kept in memory for voting.\n"
-            "E.g. 10 = last 5 seconds at 0.5 s/frame. Larger = slower reaction.",
+            "Kích thước cửa sổ",
+            "Số lượng dự đoán gần đây được giữ trong bộ nhớ để bỏ phiếu.\n"
+            "VD: 10 = 5 giây gần nhất ở tốc độ 0.5 giây/khung hình. Lớn hơn = phản ứng chậm hơn.",
             self._smooth_window_var,
-            unit="frames",
+            unit="khung hình",
         )
 
         # Min Votes
@@ -557,11 +557,11 @@ class FogLauncherApp(ctk.CTk):
         )
         _add_row(
             5,
-            "Min Votes to Confirm",
-            "Out of the Window Size frames, how many must agree on the same\n"
-            "posture before it is accepted. Aim for 70-80 % of Window Size.",
+            "Số phiếu xác nhận",
+            "Trong số các khung hình trong cửa sổ, có bao nhiêu khung hình phải đồng ý về cùng một\n"
+            "tư thế trước khi nó được chấp nhận. Nên đặt khoảng 70-80% kích thước cửa sổ.",
             self._smooth_votes_var,
-            unit="votes",
+            unit="phiếu",
         )
 
         # Status label
@@ -574,7 +574,7 @@ class FogLauncherApp(ctk.CTk):
         # Apply button
         ctk.CTkButton(
             frame,
-            text="Apply  (hot-update via MQTT)",
+            text="Áp dụng (Cập nhật nhanh qua MQTT)",
             font=ctk.CTkFont(size=12, weight="bold"),
             fg_color=COLOR["blue"], hover_color="#1f6feb",
             text_color="#0d1117", corner_radius=8, height=32,
@@ -650,14 +650,14 @@ class FogLauncherApp(ctk.CTk):
         frame.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(
-            frame, text="OFFLINE CLOUD QUEUE",
+            frame, text="HÀNG ĐỢI ĐÁM MÂY NGOẠI TUYẾN",
             font=ctk.CTkFont(size=10, weight="bold"),
             text_color=COLOR["muted"],
         ).grid(row=0, column=0, columnspan=4, padx=16, pady=(14, 6), sticky="w")
 
         # ── Status label ─────────────────────────────────────────────────
         self._queue_status_lbl = ctk.CTkLabel(
-            frame, text="● 0 events pending",
+            frame, text="● 0 sự kiện đang chờ",
             font=ctk.CTkFont(size=12),
             text_color=COLOR["green"],
         )
@@ -665,7 +665,7 @@ class FogLauncherApp(ctk.CTk):
 
         # ── Retention row ─────────────────────────────────────────────────
         ctk.CTkLabel(
-            frame, text="Auto-delete after:",
+            frame, text="Tự động xóa sau:",
             font=ctk.CTkFont(size=12), text_color=COLOR["text"],
         ).grid(row=2, column=0, padx=16, pady=4, sticky="w")
 
@@ -678,12 +678,12 @@ class FogLauncherApp(ctk.CTk):
         ).grid(row=2, column=1, padx=(4, 4), pady=4, sticky="w")
 
         ctk.CTkLabel(
-            frame, text="days",
+            frame, text="ngày",
             font=ctk.CTkFont(size=12), text_color=COLOR["muted"],
         ).grid(row=2, column=2, padx=(0, 8), pady=4, sticky="w")
 
         ctk.CTkButton(
-            frame, text="Save", width=64, height=30,
+            frame, text="Lưu", width=64, height=30,
             fg_color=COLOR["surface"], border_width=1,
             border_color=COLOR["blue"], text_color=COLOR["blue"],
             hover_color="#1a2537",
@@ -692,7 +692,7 @@ class FogLauncherApp(ctk.CTk):
 
         # ── Action buttons ────────────────────────────────────────────────
         ctk.CTkButton(
-            frame, text="🗑 Clear All Pending",
+            frame, text="🗑 Xóa tất cả hàng chờ",
             font=ctk.CTkFont(size=12, weight="bold"),
             fg_color="#cf222e", hover_color="#a40e26",
             text_color="#ffffff", height=32,
@@ -732,13 +732,13 @@ class FogLauncherApp(ctk.CTk):
         count = self._db.get_pending_count()
         if count == 0:
             self._queue_status_lbl.configure(
-                text="● 0 events pending", text_color=COLOR["green"]
+                text="● 0 sự kiện đang chờ", text_color=COLOR["green"]
             )
         else:
             age = self._db.get_oldest_pending_age_hours()
-            age_str = f"{age:.0f}h ago" if age is not None else "unknown"
+            age_str = f"{age:.0f}h trước" if age is not None else "không xác định"
             self._queue_status_lbl.configure(
-                text=f"● {count} events pending  (oldest: {age_str})",
+                text=f"● {count} sự kiện đang chờ  (cũ nhất: {age_str})",
                 text_color=COLOR["yellow"],
             )
 
@@ -758,7 +758,7 @@ class FogLauncherApp(ctk.CTk):
         title_bar.grid_columnconfigure(5, weight=1)
 
         ctk.CTkLabel(
-            title_bar, text="DATA MONITOR",
+            title_bar, text="GIÁM SÁT DỮ LIỆU",
             font=ctk.CTkFont(size=10, weight="bold"),
             text_color=COLOR["muted"],
         ).grid(row=0, column=0, sticky="w", padx=(0, 20))
@@ -786,7 +786,7 @@ class FogLauncherApp(ctk.CTk):
         ctrl.grid(row=0, column=6, padx=(12, 0), sticky="e")
 
         self._pause_btn = ctk.CTkButton(
-            ctrl, text="⏸ Pause", width=80, height=28,
+            ctrl, text="⏸ Tạm dừng", width=80, height=28,
             font=ctk.CTkFont(size=11),
             fg_color=COLOR["surface"],
             border_width=1, border_color=COLOR["yellow"],
@@ -797,7 +797,7 @@ class FogLauncherApp(ctk.CTk):
         self._pause_btn.grid(row=0, column=0, padx=4)
 
         ctk.CTkButton(
-            ctrl, text="🗑 Clear", width=80, height=28,
+            ctrl, text="🗑 Xóa", width=80, height=28,
             font=ctk.CTkFont(size=11),
             fg_color=COLOR["surface"],
             border_width=1, border_color=COLOR["muted"],
@@ -839,7 +839,7 @@ class FogLauncherApp(ctk.CTk):
         frame.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(
-            frame, text="CONSOLE LOG",
+            frame, text="NHẬT KÝ HỆ THỐNG",
             font=ctk.CTkFont(size=10, weight="bold"),
             text_color=COLOR["muted"],
         ).grid(row=0, column=0, padx=16, pady=(14, 4), sticky="w")

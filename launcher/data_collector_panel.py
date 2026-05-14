@@ -50,6 +50,10 @@ class DataCollectorPanel(ctk.CTkFrame):
         self.current_label = ""
         self._after_id = None
 
+        self.duration_hr_var = ctk.StringVar(value="0")
+        self.duration_min_var = ctk.StringVar(value="30")
+        self.duration_sec_var = ctk.StringVar(value="0")
+
         # ── Load Labels ───────────────────────────────────────────────────
         self.saved_labels = self._load_labels()
         if not self.saved_labels:
@@ -86,28 +90,39 @@ class DataCollectorPanel(ctk.CTkFrame):
         frame.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="ew")
         frame.grid_columnconfigure(1, weight=1)
 
-        ctk.CTkLabel(frame, text="⚙️ COLLECTION SETTINGS", font=ctk.CTkFont(size=12, weight="bold"), text_color="gray").grid(row=0, column=0, columnspan=2, padx=16, pady=(14, 10), sticky="w")
+        ctk.CTkLabel(frame, text="⚙️ CÀI ĐẶT THU THẬP", font=ctk.CTkFont(size=12, weight="bold"), text_color="gray").grid(row=0, column=0, columnspan=2, padx=16, pady=(14, 10), sticky="w")
 
-        # Duration
-        ctk.CTkLabel(frame, text="Duration (minutes):", font=ctk.CTkFont(size=13)).grid(row=1, column=0, padx=16, pady=6, sticky="w")
-        self.duration_var = ctk.StringVar(value="30")
-        self.duration_entry = ctk.CTkEntry(frame, textvariable=self.duration_var, width=100)
-        self.duration_entry.grid(row=1, column=1, padx=16, pady=6, sticky="w")
+        # Duration (HH:MM:SS)
+        ctk.CTkLabel(frame, text="Thời lượng (Giờ:Phút:Giây):", font=ctk.CTkFont(size=13)).grid(row=1, column=0, padx=16, pady=6, sticky="w")
+        
+        dur_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        dur_frame.grid(row=1, column=1, padx=16, pady=6, sticky="w")
+        
+        self.duration_hr_entry = ctk.CTkEntry(dur_frame, textvariable=self.duration_hr_var, width=45)
+        self.duration_hr_entry.grid(row=0, column=0, padx=(0, 2))
+        ctk.CTkLabel(dur_frame, text=":").grid(row=0, column=1, padx=2)
+        
+        self.duration_min_entry = ctk.CTkEntry(dur_frame, textvariable=self.duration_min_var, width=45)
+        self.duration_min_entry.grid(row=0, column=2, padx=2)
+        ctk.CTkLabel(dur_frame, text=":").grid(row=0, column=3, padx=2)
+        
+        self.duration_sec_entry = ctk.CTkEntry(dur_frame, textvariable=self.duration_sec_var, width=45)
+        self.duration_sec_entry.grid(row=0, column=4, padx=(2, 0))
 
         # Label Config
-        ctk.CTkLabel(frame, text="Label:", font=ctk.CTkFont(size=13)).grid(row=2, column=0, padx=16, pady=6, sticky="w")
+        ctk.CTkLabel(frame, text="Nhãn (Label):", font=ctk.CTkFont(size=13)).grid(row=2, column=0, padx=16, pady=6, sticky="w")
         self.label_var = ctk.StringVar(value=self.saved_labels[0] if self.saved_labels else "")
         self.label_combo = ctk.CTkComboBox(frame, values=self.saved_labels, variable=self.label_var, width=250)
         self.label_combo.grid(row=2, column=1, padx=16, pady=6, sticky="w")
 
         # Person Present Manual Override
-        ctk.CTkLabel(frame, text="Person Present:", font=ctk.CTkFont(size=13)).grid(row=3, column=0, padx=16, pady=6, sticky="w")
+        ctk.CTkLabel(frame, text="Có người ngồi:", font=ctk.CTkFont(size=13)).grid(row=3, column=0, padx=16, pady=6, sticky="w")
         self.person_present_var = ctk.BooleanVar(value=True)
-        self.person_present_cb = ctk.CTkCheckBox(frame, text="Current session has a person seated", variable=self.person_present_var)
+        self.person_present_cb = ctk.CTkCheckBox(frame, text="Phiên này có người đang ngồi trên đệm", variable=self.person_present_var)
         self.person_present_cb.grid(row=3, column=1, padx=16, pady=6, sticky="w")
 
         # Export Directory
-        ctk.CTkLabel(frame, text="Export Folder:", font=ctk.CTkFont(size=13)).grid(row=4, column=0, padx=16, pady=(6, 14), sticky="w")
+        ctk.CTkLabel(frame, text="Thư mục xuất file:", font=ctk.CTkFont(size=13)).grid(row=4, column=0, padx=16, pady=(6, 14), sticky="w")
         self.export_dir_var = ctk.StringVar(value=str(EXPORT_DIR.resolve()))
         
         dir_frame = ctk.CTkFrame(frame, fg_color="transparent")
@@ -117,7 +132,7 @@ class DataCollectorPanel(ctk.CTkFrame):
         self.dir_entry = ctk.CTkEntry(dir_frame, textvariable=self.export_dir_var, state="readonly")
         self.dir_entry.grid(row=0, column=0, sticky="ew", padx=(0, 10))
         
-        self.btn_browse = ctk.CTkButton(dir_frame, text="Browse...", width=80, command=self._browse_directory)
+        self.btn_browse = ctk.CTkButton(dir_frame, text="Chọn...", width=80, command=self._browse_directory)
         self.btn_browse.grid(row=0, column=1)
 
     def _browse_directory(self):
@@ -130,11 +145,11 @@ class DataCollectorPanel(ctk.CTkFrame):
         frame.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
         frame.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(frame, text="📊 EXCEL DATA COLUMNS", font=ctk.CTkFont(size=12, weight="bold"), text_color="gray").grid(row=0, column=0, columnspan=4, padx=16, pady=(14, 10), sticky="w")
+        ctk.CTkLabel(frame, text="📊 CÁC CỘT DỮ LIỆU EXCEL", font=ctk.CTkFont(size=12, weight="bold"), text_color="gray").grid(row=0, column=0, columnspan=4, padx=16, pady=(14, 10), sticky="w")
 
         self.cb_vars = {}
         columns = [
-            ("Time", "time", True),
+            ("Thời gian", "time", True),
             ("FSR Front Left", "fsr_front_left", True),
             ("FSR Front Mid", "fsr_front_mid", True),
             ("FSR Front Right", "fsr_front_right", True),
@@ -144,8 +159,8 @@ class DataCollectorPanel(ctk.CTkFrame):
             ("FSR Back Left", "fsr_back_left", True),
             ("FSR Back Mid", "fsr_back_mid", True),
             ("FSR Back Right", "fsr_back_right", True),
-            ("Temperature", "temperature", True),
-            ("Person Present", "person_present", True),
+            ("Nhiệt độ", "temperature", True),
+            ("Người ngồi", "person_present", True),
         ]
 
         row_idx = 1
@@ -160,7 +175,7 @@ class DataCollectorPanel(ctk.CTkFrame):
                 col_idx = 0
                 row_idx += 1
 
-        ctk.CTkLabel(frame, text="* Label column will always be included automatically.", font=ctk.CTkFont(size=11), text_color="gray").grid(row=row_idx+1, column=0, columnspan=4, padx=16, pady=(0, 14), sticky="w")
+        ctk.CTkLabel(frame, text="* Cột Label sẽ luôn được tự động bao gồm.", font=ctk.CTkFont(size=11), text_color="gray").grid(row=row_idx+1, column=0, columnspan=4, padx=16, pady=(0, 14), sticky="w")
 
     def _build_status_panel(self):
         frame = ctk.CTkFrame(self, bg_color="transparent", fg_color="transparent")
@@ -168,16 +183,16 @@ class DataCollectorPanel(ctk.CTkFrame):
         frame.grid_columnconfigure(0, weight=1)
 
         self.btn_action = ctk.CTkButton(
-            frame, text="▶ START COLLECTION", font=ctk.CTkFont(size=14, weight="bold"),
+            frame, text="▶ BẮT ĐẦU THU THẬP", font=ctk.CTkFont(size=14, weight="bold"),
             fg_color="#3fb950", hover_color="#2ea043", text_color="white", height=40,
             command=self._toggle_collection
         )
         self.btn_action.grid(row=0, column=0, pady=10)
 
-        self.status_label = ctk.CTkLabel(frame, text="Ready to collect data...", font=ctk.CTkFont(size=14))
+        self.status_label = ctk.CTkLabel(frame, text="Sẵn sàng thu thập dữ liệu...", font=ctk.CTkFont(size=14))
         self.status_label.grid(row=1, column=0, pady=5)
 
-        self.count_label = ctk.CTkLabel(frame, text="Data rows: 0", font=ctk.CTkFont(size=12), text_color="gray")
+        self.count_label = ctk.CTkLabel(frame, text="Số dòng dữ liệu: 0", font=ctk.CTkFont(size=12), text_color="gray")
         self.count_label.grid(row=2, column=0, pady=(0, 10))
 
         self.progress_bar = ctk.CTkProgressBar(frame, mode="determinate")
@@ -194,16 +209,20 @@ class DataCollectorPanel(ctk.CTkFrame):
 
     def _start_collection(self):
         try:
-            dur_mins = float(self.duration_var.get().strip())
-            if dur_mins <= 0:
+            hr = float(self.duration_hr_var.get().strip() or 0)
+            mn = float(self.duration_min_var.get().strip() or 0)
+            sc = float(self.duration_sec_var.get().strip() or 0)
+            
+            total_secs = int(hr * 3600 + mn * 60 + sc)
+            if total_secs <= 0:
                 raise ValueError
         except ValueError:
-            self.status_label.configure(text="Error: Invalid duration!", text_color="#f85149")
+            self.status_label.configure(text="Lỗi: Thời lượng không hợp lệ!", text_color="#f85149")
             return
 
         lbl = self.label_var.get().strip()
         if not lbl:
-            self.status_label.configure(text="Error: Please enter a label!", text_color="#f85149")
+            self.status_label.configure(text="Lỗi: Vui lòng nhập nhãn!", text_color="#f85149")
             return
 
         # Save label to history if new
@@ -220,22 +239,24 @@ class DataCollectorPanel(ctk.CTkFrame):
             self.current_posture_name = lbl
         self.collected_data.clear()
         
-        self.total_duration_secs = int(dur_mins * 60)
+        self.total_duration_secs = total_secs
         self.end_time = datetime.datetime.now() + datetime.timedelta(seconds=self.total_duration_secs)
         
         self.is_collecting = True
         
         # Disable UI
-        self.duration_entry.configure(state="disabled")
+        self.duration_hr_entry.configure(state="disabled")
+        self.duration_min_entry.configure(state="disabled")
+        self.duration_sec_entry.configure(state="disabled")
         self.label_combo.configure(state="disabled")
         self.person_present_cb.configure(state="disabled")
         self.btn_browse.configure(state="disabled")
-        for cb in self.cb_vars.values(): # checkboxes are handled via var mostly, but visual disabled might be skipped for simplicity
+        for cb in self.cb_vars.values():
             pass
 
-        self.btn_action.configure(text="■ STOP", fg_color="#f85149", hover_color="#a40e26")
-        self.status_label.configure(text="Collecting...", text_color="#3fb950")
-        self.count_label.configure(text="Data rows: 0")
+        self.btn_action.configure(text="■ DỪNG", fg_color="#f85149", hover_color="#a40e26")
+        self.status_label.configure(text="Đang thu thập...", text_color="#3fb950")
+        self.count_label.configure(text="Số dòng dữ liệu: 0")
         self.progress_bar.set(0)
 
         self._tick_timer()
@@ -256,8 +277,12 @@ class DataCollectorPanel(ctk.CTkFrame):
         self.progress_bar.set(p)
 
         # Update text
-        m, s = divmod(int(rem_secs), 60)
-        self.status_label.configure(text=f"Collecting... Time remaining: {m:02d}:{s:02d}")
+        h, rem = divmod(int(rem_secs), 3600)
+        m, s = divmod(rem, 60)
+        if h > 0:
+            self.status_label.configure(text=f"Đang thu thập... Còn lại: {h:02d}:{m:02d}:{s:02d}")
+        else:
+            self.status_label.configure(text=f"Đang thu thập... Còn lại: {m:02d}:{s:02d}")
 
         self._after_id = self.after(1000, self._tick_timer)
 
@@ -267,12 +292,14 @@ class DataCollectorPanel(ctk.CTkFrame):
             self.after_cancel(self._after_id)
             self._after_id = None
             
-        self.duration_entry.configure(state="normal")
+        self.duration_hr_entry.configure(state="normal")
+        self.duration_min_entry.configure(state="normal")
+        self.duration_sec_entry.configure(state="normal")
         self.label_combo.configure(state="normal")
         self.person_present_cb.configure(state="normal")
         self.btn_browse.configure(state="normal")
         
-        self.btn_action.configure(text="▶ START COLLECTION", fg_color="#3fb950", hover_color="#2ea043")
+        self.btn_action.configure(text="▶ BẮT ĐẦU THU THẬP", fg_color="#3fb950", hover_color="#2ea043")
         self.progress_bar.set(1.0)
 
         total_rows = len(self.collected_data)

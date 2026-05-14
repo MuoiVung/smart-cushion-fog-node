@@ -16,13 +16,13 @@ class DashboardPanel(ctk.CTkFrame):
         
         # ── State ──────────────────────────────────────────────────────────
         self.posture_label = ctk.CTkLabel(
-            self, text="Waiting for data...", 
+            self, text="Đang chờ dữ liệu...", 
             font=ctk.CTkFont(size=24, weight="bold")
         )
         self.posture_label.grid(row=0, column=0, columnspan=3, pady=(20, 10))
         
         self.confidence_label = ctk.CTkLabel(
-            self, text="Confidence: --%", 
+            self, text="Độ tin cậy: --%", 
             font=ctk.CTkFont(size=14), text_color="gray"
         )
         self.confidence_label.grid(row=1, column=0, columnspan=3, pady=(0, 20))
@@ -35,21 +35,21 @@ class DashboardPanel(ctk.CTkFrame):
         features_frame.grid_columnconfigure(2, weight=1)
 
         ctk.CTkLabel(
-            features_frame, text="Processed AI Features (Relative Pressure %)",
+            features_frame, text="Đặc trưng AI (Tỷ lệ áp lực %)",
             font=ctk.CTkFont(size=12, weight="bold"), text_color="gray"
         ).grid(row=0, column=0, columnspan=3, pady=(10, 10))
 
-        self.fl_bar = self._create_feature_bar(features_frame, "Front Left", 1, 0)
-        self.fm_bar = self._create_feature_bar(features_frame, "Front Mid", 1, 1)
-        self.fr_bar = self._create_feature_bar(features_frame, "Front Right", 1, 2)
+        self.fl_bar = self._create_feature_bar(features_frame, "Trước Trái", 1, 0)
+        self.fm_bar = self._create_feature_bar(features_frame, "Trước Giữa", 1, 1)
+        self.fr_bar = self._create_feature_bar(features_frame, "Trước Phải", 1, 2)
         
-        self.ml_bar = self._create_feature_bar(features_frame, "Mid Left", 2, 0)
-        self.mm_bar = self._create_feature_bar(features_frame, "Mid Mid", 2, 1)
-        self.mr_bar = self._create_feature_bar(features_frame, "Mid Right", 2, 2)
-
-        self.bl_bar = self._create_feature_bar(features_frame, "Back Left", 3, 0)
-        self.bm_bar = self._create_feature_bar(features_frame, "Back Mid", 3, 1)
-        self.br_bar = self._create_feature_bar(features_frame, "Back Right", 3, 2)
+        self.ml_bar = self._create_feature_bar(features_frame, "Giữa Trái", 2, 0)
+        self.mm_bar = self._create_feature_bar(features_frame, "Giữa Giữa", 2, 1)
+        self.mr_bar = self._create_feature_bar(features_frame, "Giữa Phải", 2, 2)
+        
+        self.bl_bar = self._create_feature_bar(features_frame, "Sau Trái", 3, 0)
+        self.bm_bar = self._create_feature_bar(features_frame, "Sau Giữa", 3, 1)
+        self.br_bar = self._create_feature_bar(features_frame, "Sau Phải", 3, 2)
 
     def _create_feature_bar(self, parent, name, row, col):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
@@ -68,17 +68,17 @@ class DashboardPanel(ctk.CTkFrame):
         try:
             occupancy = payload_dict.get("occupancy_state", "empty").lower()
             if occupancy == "empty":
-                self.posture_label.configure(text="No Person Detected", text_color="gray")
-                self.confidence_label.configure(text="Duration: 0s")
-                self._update_bar(self.fl_bar, "Front Left", 0.0)
-                self._update_bar(self.fm_bar, "Front Mid", 0.0)
-                self._update_bar(self.fr_bar, "Front Right", 0.0)
-                self._update_bar(self.ml_bar, "Mid Left", 0.0)
-                self._update_bar(self.mm_bar, "Mid Mid", 0.0)
-                self._update_bar(self.mr_bar, "Mid Right", 0.0)
-                self._update_bar(self.bl_bar, "Back Left", 0.0)
-                self._update_bar(self.bm_bar, "Back Mid", 0.0)
-                self._update_bar(self.br_bar, "Back Right", 0.0)
+                self.posture_label.configure(text="Không phát hiện người ngồi", text_color="gray")
+                self.confidence_label.configure(text="Thời lượng: 0s")
+                self._update_bar(self.fl_bar, "Trước Trái", 0.0)
+                self._update_bar(self.fm_bar, "Trước Giữa", 0.0)
+                self._update_bar(self.fr_bar, "Trước Phải", 0.0)
+                self._update_bar(self.ml_bar, "Giữa Trái", 0.0)
+                self._update_bar(self.mm_bar, "Giữa Giữa", 0.0)
+                self._update_bar(self.mr_bar, "Giữa Phải", 0.0)
+                self._update_bar(self.bl_bar, "Sau Trái", 0.0)
+                self._update_bar(self.bm_bar, "Sau Giữa", 0.0)
+                self._update_bar(self.br_bar, "Sau Phải", 0.0)
                 return
 
             posture = payload_dict.get("posture", "EMPTY").upper()
@@ -94,22 +94,22 @@ class DashboardPanel(ctk.CTkFrame):
             else:
                 color = "#f85149"  # Red
                 
-            self.posture_label.configure(text=f"Posture: {posture}", text_color=color)
+            self.posture_label.configure(text=f"Tư thế: {posture}", text_color=color)
             
             duration = payload_dict.get("session_duration_sec", 0)
-            self.confidence_label.configure(text=f"Duration: {duration}s")
+            self.confidence_label.configure(text=f"Thời lượng: {duration}s")
 
             features = payload_dict.get("sensors_heatmap_pct", [])
             if features and len(features) == 9:
-                self._update_bar(self.fl_bar, "Front Left", features[0])
-                self._update_bar(self.fm_bar, "Front Mid", features[1])
-                self._update_bar(self.fr_bar, "Front Right", features[2])
-                self._update_bar(self.ml_bar, "Mid Left", features[3])
-                self._update_bar(self.mm_bar, "Mid Mid", features[4])
-                self._update_bar(self.mr_bar, "Mid Right", features[5])
-                self._update_bar(self.bl_bar, "Back Left", features[6])
-                self._update_bar(self.bm_bar, "Back Mid", features[7])
-                self._update_bar(self.br_bar, "Back Right", features[8])
+                self._update_bar(self.fl_bar, "Trước Trái", features[0])
+                self._update_bar(self.fm_bar, "Trước Giữa", features[1])
+                self._update_bar(self.fr_bar, "Trước Phải", features[2])
+                self._update_bar(self.ml_bar, "Giữa Trái", features[3])
+                self._update_bar(self.mm_bar, "Giữa Giữa", features[4])
+                self._update_bar(self.mr_bar, "Giữa Phải", features[5])
+                self._update_bar(self.bl_bar, "Sau Trái", features[6])
+                self._update_bar(self.bm_bar, "Sau Giữa", features[7])
+                self._update_bar(self.br_bar, "Sau Phải", features[8])
 
         except Exception as e:
             pass
