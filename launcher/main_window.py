@@ -413,6 +413,13 @@ class FogLauncherApp(ctk.CTk):
             command=self._on_model_mode_change,
         ).grid(row=1, column=2, padx=8, pady=4, sticky="w")
 
+        ctk.CTkRadioButton(
+            frame, text="XGBoost (.pkl)",
+            variable=self._model_mode, value="xgboost",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._on_model_mode_change,
+        ).grid(row=1, column=3, padx=8, pady=4, sticky="w")
+
         # ── Row 2: Model file ───────────────────────────────────────
         self._model_lbl = ctk.CTkLabel(
             frame, text="Model File:",
@@ -918,13 +925,16 @@ class FogLauncherApp(ctk.CTk):
             self._browse_btn.configure(state="normal")
             self._scaler_entry.configure(state="normal")
             self._scaler_browse_btn.configure(state="normal")
-        elif mode == "random_forest":
+        elif mode in ["random_forest", "xgboost"]:
             self._model_lbl.configure(text="Model (.pkl):")
             self._model_entry.configure(state="normal")
             self._browse_btn.configure(state="normal")
             self._scaler_entry.configure(state="disabled")
             self._scaler_browse_btn.configure(state="disabled")
-            self._model_match_label.configure(text="ℹ️ Random Forest does not require a Scaler file.", text_color=COLOR["blue"])
+            self._model_match_label.configure(
+                text=f"ℹ️ {mode.replace('_', ' ').title()} does not require a Scaler file.", 
+                text_color=COLOR["blue"]
+            )
         else:
             self._model_entry.configure(state="disabled")
             self._browse_btn.configure(state="disabled")
@@ -934,8 +944,9 @@ class FogLauncherApp(ctk.CTk):
 
     def _on_browse_model(self) -> None:
         mode = self._model_mode.get()
-        ftypes = [("Pickle Model", "*.pkl"), ("All Files", "*")] if mode == "random_forest" else [("Keras Model", "*.h5 *.keras"), ("All Files", "*")]
-        title = "Select Random Forest Model (.pkl)" if mode == "random_forest" else "Select Keras Model (.h5)"
+        is_pickle = mode in ["random_forest", "xgboost"]
+        ftypes = [("Pickle Model", "*.pkl"), ("All Files", "*")] if is_pickle else [("Keras Model", "*.h5 *.keras"), ("All Files", "*")]
+        title = f"Select {mode.replace('_', ' ').title()} Model (.pkl)" if is_pickle else "Select Keras Model (.h5)"
         
         path = filedialog.askopenfilename(
             title=title,
@@ -1009,7 +1020,7 @@ class FogLauncherApp(ctk.CTk):
 
     def _on_apply_model(self) -> None:
         mode = self._model_mode.get()
-        if mode in ["keras", "random_forest"]:
+        if mode in ["keras", "random_forest", "xgboost"]:
             model_path  = self._model_path_var.get().strip()
             scaler_path = self._scaler_path_var.get().strip() if mode == "keras" else "none"
 
