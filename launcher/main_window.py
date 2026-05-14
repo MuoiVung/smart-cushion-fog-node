@@ -390,27 +390,35 @@ class FogLauncherApp(ctk.CTk):
         ).grid(row=0, column=0, columnspan=4, padx=16, pady=(14, 8), sticky="w")
 
         # ── Mode selector ─────────────────────────────────────────────────
-        self._model_mode = ctk.StringVar(value="keras")
+        self._model_mode = ctk.StringVar(value=self._db.get_config("model_type", "keras"))
 
         ctk.CTkRadioButton(
-            frame, text="Rule-based Stub  (no model needed)",
+            frame, text="Rule-based Stub",
             variable=self._model_mode, value="rule_based",
             font=ctk.CTkFont(size=12),
             command=self._on_model_mode_change,
         ).grid(row=1, column=0, padx=16, pady=4, sticky="w")
 
         ctk.CTkRadioButton(
-            frame, text="Keras Model  (.h5 / .keras)",
+            frame, text="Keras Model (.h5)",
             variable=self._model_mode, value="keras",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=ctk.CTkFont(size=12, weight="bold"),
             command=self._on_model_mode_change,
         ).grid(row=1, column=1, padx=8, pady=4, sticky="w")
+        
+        ctk.CTkRadioButton(
+            frame, text="Random Forest (.pkl)",
+            variable=self._model_mode, value="random_forest",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._on_model_mode_change,
+        ).grid(row=1, column=2, padx=8, pady=4, sticky="w")
 
-        # ── Row 2: Model file (.h5) ───────────────────────────────────────
-        ctk.CTkLabel(
-            frame, text="Model (.h5):",
+        # ── Row 2: Model file ───────────────────────────────────────
+        self._model_lbl = ctk.CTkLabel(
+            frame, text="Model File:",
             font=ctk.CTkFont(size=11), text_color=COLOR["muted"],
-        ).grid(row=2, column=0, padx=16, pady=4, sticky="e")
+        )
+        self._model_lbl.grid(row=2, column=0, padx=16, pady=4, sticky="e")
 
         self._model_path_var = ctk.StringVar(
             value=self._db.get_config("model_path", _read_env("MODEL_PATH", "ai/models/posture_9_model.h5"))
@@ -905,10 +913,18 @@ class FogLauncherApp(ctk.CTk):
     def _on_model_mode_change(self) -> None:
         mode = self._model_mode.get()
         if mode == "keras":
+            self._model_lbl.configure(text="Model (.h5):")
             self._model_entry.configure(state="normal")
             self._browse_btn.configure(state="normal")
             self._scaler_entry.configure(state="normal")
             self._scaler_browse_btn.configure(state="normal")
+        elif mode == "random_forest":
+            self._model_lbl.configure(text="Model (.pkl):")
+            self._model_entry.configure(state="normal")
+            self._browse_btn.configure(state="normal")
+            self._scaler_entry.configure(state="disabled")
+            self._scaler_browse_btn.configure(state="disabled")
+            self._model_match_label.configure(text="ℹ️ Random Forest does not require a Scaler file.", text_color=COLOR["blue"])
         else:
             self._model_entry.configure(state="disabled")
             self._browse_btn.configure(state="disabled")
@@ -917,9 +933,13 @@ class FogLauncherApp(ctk.CTk):
             self._model_match_label.configure(text="")
 
     def _on_browse_model(self) -> None:
+        mode = self._model_mode.get()
+        ftypes = [("Pickle Model", "*.pkl"), ("All Files", "*")] if mode == "random_forest" else [("Keras Model", "*.h5 *.keras"), ("All Files", "*")]
+        title = "Select Random Forest Model (.pkl)" if mode == "random_forest" else "Select Keras Model (.h5)"
+        
         path = filedialog.askopenfilename(
-            title="Select Keras Model (.h5)",
-            filetypes=[("Keras Model", "*.h5 *.keras"), ("All Files", "*")],
+            title=title,
+            filetypes=ftypes,
             initialdir=str(PROJECT_ROOT / "ai" / "models"),
         )
         if path:
@@ -989,20 +1009,20 @@ class FogLauncherApp(ctk.CTk):
 
     def _on_apply_model(self) -> None:
         mode = self._model_mode.get()
-        if mode == "keras":
+        if mode in ["keras", "random_forest"]:
             model_path  = self._model_path_var.get().strip()
-            scaler_path = self._scaler_path_var.get().strip()
+            scaler_path = self._scaler_path_var.get().strip() if mode == "keras" else "none"
 
             # Validate model file
             if not Path(model_path).exists() and not Path(PROJECT_ROOT / model_path).exists():
                 messagebox.showwarning(
                     "Model Not Found",
-                    f"Model file not found:\n{model_path}\n\nPlease browse for a valid .h5 file.",
+                    f"Model file not found:\n{model_path}\n\nPlease browse for a valid model file.",
                 )
                 return
 
             # Validate scaler file
-            if not Path(scaler_path).exists() and not Path(PROJECT_ROOT / scaler_path).exists():
+            if mode == "keras" and not Path(scaler_path).exists() and not Path(PROJECT_ROOT / scaler_path).exists():
                 messagebox.showwarning(
                     "Scaler Not Found",
                     f"Scaler file not found:\n{scaler_path}\n\nPlease browse for the matching .pkl file.",
@@ -1017,20 +1037,22 @@ class FogLauncherApp(ctk.CTk):
                 pass # Not within project root, keep absolute
                 
             try:
-                rel_scaler = Path(scaler_path).relative_to(PROJECT_ROOT)
-                scaler_path = str(rel_scaler)
+                if scaler_path != "none":
+                    rel_scaler = Path(scaler_path).relative_to(PROJECT_ROOT)
+                    scaler_path = str(rel_scaler)
             except ValueError:
                 pass # Not within project root, keep absolute
 
             # Persist to DB (sole source of truth for model paths)
+            self._db.set_config("model_type",  mode)
             self._db.set_config("model_path",  model_path)
             self._db.set_config("scaler_path", scaler_path)
-            self._log_console(f"Config saved (relative) → {model_path}")
+            self._log_console(f"Config saved (relative) → [{mode}] {model_path}")
 
 
             # Hot-reload if MQTT is live (no Docker restart needed!)
             if self._mqtt_connected:
-                ok = self._mqtt_monitor.publish_model_reload(model_path, scaler_path)
+                ok = self._mqtt_monitor.publish_model_reload(mode, model_path, scaler_path)
                 if ok:
                     self._log_console("🔥 Hot-reload sent — model will swap in ~2s without restart")
                     self._apply_btn.configure(text="🔥 Sent! (no restart needed)")
@@ -1042,11 +1064,14 @@ class FogLauncherApp(ctk.CTk):
             self._docker.restart_fog_node()
         else:
             # Rule-based stub mode
+            _write_env("MODEL_TYPE",  "rule_based")
             _write_env("MODEL_PATH",  "ai/models/dummy_model.h5")
             _write_env("SCALER_PATH", "ai/models/dummy_scaler.pkl")
+            self._db.set_config("model_type",  "rule_based")
             self._log_console("AI Mode: Rule-based stub (model files will be ignored)")
             if self._mqtt_connected:
                 self._mqtt_monitor.publish_model_reload(
+                    "rule_based",
                     "ai/models/dummy_model.h5",
                     "ai/models/dummy_scaler.pkl",
                 )

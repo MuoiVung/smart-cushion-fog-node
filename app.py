@@ -88,9 +88,11 @@ class FogApplication:
         self._preprocessor = Preprocessor()   # no parameters needed anymore
 
         # Read model paths from DB (source of truth); fall back to .env on first run
+        _model_type  = self._local_db.get_config("model_type",  "keras") # We don't have settings.model_type yet, default to keras
         _model_path  = self._local_db.get_config("model_path",  settings.model_path)
         _scaler_path = self._local_db.get_config("scaler_path", settings.scaler_path)
         self._inference = InferenceEngine(
+            model_type  = _model_type,
             model_path  = _model_path,
             scaler_path = _scaler_path,
         )
@@ -305,26 +307,27 @@ class FogApplication:
         """
         try:
             data = json.loads(payload.decode())
+            new_model_type  = data.get("model_type",  "keras").strip()
             new_model_path  = data.get("model_path",  "").strip()
             new_scaler_path = data.get("scaler_path", "").strip()
 
-            if not new_model_path or not new_scaler_path:
+            if not new_model_path or (new_model_type == "keras" and not new_scaler_path):
                 logger.error("[HOT-RELOAD] Missing model_path or scaler_path in payload")
                 return
 
             mp = Path(new_model_path)
-            sp = Path(new_scaler_path)
+            sp = Path(new_scaler_path) if new_model_type == "keras" else None
 
             if not mp.exists():
                 logger.error(f"[HOT-RELOAD] Model file not found: {mp}")
                 return
-            if not sp.exists():
+            if sp and not sp.exists():
                 logger.error(f"[HOT-RELOAD] Scaler file not found: {sp}")
                 return
 
-            logger.info(f"[HOT-RELOAD] Swapping model → {mp.name} + {sp.name}")
-            print(f"🔥 [HOT-RELOAD] Swapping model → {mp.name} + {sp.name}")
-            success = self._inference.reload(str(mp), str(sp))
+            logger.info(f"[HOT-RELOAD] Swapping [{new_model_type}] model → {mp.name}")
+            print(f"🔥 [HOT-RELOAD] Swapping [{new_model_type}] model → {mp.name}")
+            success = self._inference.reload(new_model_type, str(mp), str(sp) if sp else "")
             if not success:
                 logger.warning("[HOT-RELOAD] Swap failed — previous model still active")
                 print("⚠️ [HOT-RELOAD] Swap failed — previous model still active")

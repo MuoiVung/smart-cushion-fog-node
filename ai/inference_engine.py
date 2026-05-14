@@ -106,11 +106,13 @@ class InferenceEngine:
 
     def __init__(
         self,
+        model_type:  str = "keras",
         model_path:  str = "ai/models/smart_cushion_model.h5",
         scaler_path: str = "ai/models/fsr_scaler.pkl",
     ) -> None:
+        self._model_type  = model_type
         self._model_path  = Path(model_path)
-        self._scaler_path = Path(scaler_path)
+        self._scaler_path = Path(scaler_path) if scaler_path else None
         self._model  = None
         self._scaler = None
         self._use_stub = False
@@ -125,7 +127,7 @@ class InferenceEngine:
         """True when no trained model was found and the rule-based stub is active."""
         return self._use_stub
 
-    def reload(self, model_path: str, scaler_path: str) -> bool:
+    def reload(self, model_type: str, model_path: str, scaler_path: str) -> bool:
         """
         Hot-reload model and scaler in-place without restarting the Fog Node.
 
@@ -135,6 +137,7 @@ class InferenceEngine:
         Returns:
             True if reload succeeded, False if it failed (old model kept active).
         """
+        old_model_type = self._model_type
         old_model      = self._model
         old_scaler     = self._scaler
         old_use_stub   = self._use_stub
@@ -142,8 +145,9 @@ class InferenceEngine:
         old_model_path = self._model_path
         old_scaler_path= self._scaler_path
 
+        self._model_type  = model_type
         self._model_path  = Path(model_path)
-        self._scaler_path = Path(scaler_path)
+        self._scaler_path = Path(scaler_path) if scaler_path else None
         self._model       = None
         self._scaler      = None
         self._use_stub    = False
@@ -152,6 +156,7 @@ class InferenceEngine:
 
         if self._use_stub and not (old_use_stub):
             # New model failed to load — restore previous state
+            self._model_type  = old_model_type
             self._model       = old_model
             self._scaler      = old_scaler
             self._use_stub    = old_use_stub
@@ -161,7 +166,8 @@ class InferenceEngine:
             logger.error("[HOT-RELOAD] ❌ Failed to load new model — previous model is still active")
             return False
 
-        logger.info(f"[HOT-RELOAD] ✅ Model swapped: {self._model_path.name} + {self._scaler_path.name}")
+        sp_name = self._scaler_path.name if self._scaler_path else "none"
+        logger.info(f"[HOT-RELOAD] ✅ Model swapped: [{self._model_type}] {self._model_path.name} + {sp_name}")
         return True
 
     def predict(self, raw_sensors: np.ndarray) -> Tuple[PostureLabel, float, list[dict]]:
@@ -185,36 +191,54 @@ class InferenceEngine:
             return PostureLabel.EMPTY, 1.0, [{"label": "empty", "confidence": 1.0}]
 
         # ── Step 2: Run AI Inference ────────────────────────────────────────
-        return self._keras_predict(raw_sensors)
+        return self._ai_predict(raw_sensors)
 
-    # ── Private: Keras CNN inference ───────────────────────────────────────
+    # ── Private: Model inference ───────────────────────────────────────
 
-    def _keras_predict(self, raw_sensors: np.ndarray) -> Tuple[PostureLabel, float, list[dict]]:
+    def _ai_predict(self, raw_sensors: np.ndarray) -> Tuple[PostureLabel, float, list[dict]]:
         """
-        Run the Keras CNN model (currently binary, maps to 11-class output).
-
-        Input pipeline:
-          raw ADC (9,) → MinMaxScaler → reshape(1, 3, 3, 1) → CNN → sigmoid score
+        Run the selected AI model.
         """
         try:
-            if self._scaler is None or self._model is None:
-                raise ValueError("Model or Scaler not loaded.")
+            if self._model is None:
+                raise ValueError("Model not loaded.")
+                
+            if self._model_type == "keras":
+                if self._scaler is None:
+                    raise ValueError("Scaler not loaded for Keras model.")
+                import pandas as pd
+                fsr_cols = [
+                    'FSR Front Left',  'FSR Front Mid',  'FSR Front Right',
+                    'FSR Mid Left',    'FSR Mid Mid',    'FSR Mid Right',
+                    'FSR Back Left',   'FSR Back Mid',   'FSR Back Right',
+                ]
+                input_df = pd.DataFrame([raw_sensors.tolist()], columns=fsr_cols)
+                scaled   = self._scaler.transform(input_df)     # (1, 9) MinMax scaled
+                cnn_in   = scaled.reshape(1, 3, 3, 1)           # reshape for Conv2D
+                predictions = self._model.predict(cnn_in, verbose=0)[0]
+            elif self._model_type == "random_forest":
+                # Feature Engineering đồng bộ với train_rf.py
+                raw_sensors = np.array(raw_sensors, dtype=np.float32)
+                row_sum = raw_sensors.sum()
+                if row_sum == 0: row_sum = 1
+                rel_sensors = raw_sensors / row_sum
+                
+                # Tính các vùng: [FL, FM, FR, ML, MM, MR, BL, BM, BR]
+                f_sum = rel_sensors[[0, 1, 2]].sum()
+                b_sum = rel_sensors[[6, 7, 8]].sum()
+                l_sum = rel_sensors[[0, 3, 6]].sum()
+                r_sum = rel_sensors[[2, 5, 8]].sum()
+                
+                fb_ratio = (f_sum - b_sum) / (f_sum + b_sum + 1e-5)
+                lr_ratio = (l_sum - r_sum) / (l_sum + r_sum + 1e-5)
+                
+                # Tổng hợp 11 features: 9 raw + 2 engineered
+                input_final = np.hstack([rel_sensors, [fb_ratio, lr_ratio]]).reshape(1, -1)
+                predictions = self._model.predict_proba(input_final)[0]
+            else:
+                raise ValueError(f"Unknown model type: {self._model_type}")
 
-            import pandas as pd
-
-            fsr_cols = [
-                'FSR Front Left',  'FSR Front Mid',  'FSR Front Right',
-                'FSR Mid Left',    'FSR Mid Mid',    'FSR Mid Right',
-                'FSR Back Left',   'FSR Back Mid',   'FSR Back Right',
-            ]
-            input_df = pd.DataFrame([raw_sensors.tolist()], columns=fsr_cols)
-            scaled   = self._scaler.transform(input_df)     # (1, 9) MinMax scaled
-            cnn_in   = scaled.reshape(1, 3, 3, 1)           # reshape for Conv2D
-
-            # Get full prediction array
-            predictions = self._model.predict(cnn_in, verbose=0)[0]
-
-            if self._is_binary:
+            if self._model_type == "keras" and self._is_binary:
                 # Binary model: score ≥ 0.5 → NUP (correct), < 0.5 → LF (bad)
                 score = float(predictions[0])
                 if score >= 0.5:
@@ -231,7 +255,9 @@ class InferenceEngine:
                 confidence    = float(predictions[predicted_idx])
                 
                 # Use appropriate label list based on output count
-                labels = POSTURE_LABELS_9 if len(predictions) == 9 else POSTURE_LABELS_11
+                # If exactly 11 classes, use 11-label list (includes Empty/Object)
+                # Otherwise assume it's a 9-posture model (or a partial subset of it)
+                labels = POSTURE_LABELS_11 if len(predictions) == 11 else POSTURE_LABELS_9
                 label = labels[predicted_idx]
 
                 # Get top 3
@@ -243,13 +269,13 @@ class InferenceEngine:
                         "confidence": float(round(predictions[idx], 4))
                     })
                 
-                logger.debug(f"Keras multi-class prediction: {label.value} (idx={predicted_idx}, conf={confidence:.3f})")
+                logger.debug(f"AI multi-class prediction: {label.value} (idx={predicted_idx}, conf={confidence:.3f})")
 
             return label, round(confidence, 4), top_3
 
         except Exception as exc:
-            if self._scaler is None or self._model is None:
-                error_text = "❌ AI INFERENCE ERROR: Model or Scaler not loaded."
+            if self._model is None:
+                error_text = "❌ AI INFERENCE ERROR: Model not loaded."
             else:
                 error_text = f"❌ AI INFERENCE CRITICAL ERROR: {exc}"
             
@@ -265,14 +291,17 @@ class InferenceEngine:
     # ── Private: model loading ─────────────────────────────────────────────
 
     def _load_model(self) -> None:
-        """Load Keras model and sklearn scaler from disk."""
+        """Load model and scaler from disk."""
         model_ok  = self._model_path.exists()
-        scaler_ok = self._scaler_path.exists()
+        scaler_ok = True
+        
+        if self._model_type == "keras":
+            scaler_ok = self._scaler_path and self._scaler_path.exists()
 
         if not model_ok or not scaler_ok:
             missing = []
             if not model_ok:  missing.append(str(self._model_path.absolute()))
-            if not scaler_ok: missing.append(str(self._scaler_path.absolute()))
+            if not scaler_ok: missing.append(str(self._scaler_path.absolute()) if self._scaler_path else "None")
             error_text = (
                 f"❌ CRITICAL: AI MODEL FILES MISSING! Checked: {missing}. "
                 "System will NOT provide accurate predictions."
@@ -283,23 +312,30 @@ class InferenceEngine:
             return
 
         try:
-            import tensorflow as tf
-            self._model  = tf.keras.models.load_model(str(self._model_path), compile=False)
-            self._scaler = joblib.load(str(self._scaler_path))
+            if self._model_type == "keras":
+                import tensorflow as tf
+                self._model  = tf.keras.models.load_model(str(self._model_path), compile=False)
+                self._scaler = joblib.load(str(self._scaler_path))
 
-            # Detect binary vs multi-class from output shape
-            output_units = self._model.output_shape[-1]
-            if output_units == 1:
-                self._is_binary = True
-                logger.info(
-                    f"Keras binary CNN loaded from '{self._model_path}' "
-                    "(maps to NUP / LF for now — retrain with 11 classes for full support)"
-                )
-            else:
+                # Detect binary vs multi-class from output shape
+                output_units = self._model.output_shape[-1]
+                if output_units == 1:
+                    self._is_binary = True
+                    logger.info(
+                        f"Keras binary CNN loaded from '{self._model_path}' "
+                        "(maps to NUP / LF for now — retrain with 11 classes for full support)"
+                    )
+                else:
+                    self._is_binary = False
+                    logger.info(
+                        f"Keras {output_units}-class CNN loaded from '{self._model_path}'"
+                    )
+            elif self._model_type == "random_forest":
+                self._model = joblib.load(str(self._model_path))
+                self._scaler = None
                 self._is_binary = False
-                logger.info(
-                    f"Keras {output_units}-class CNN loaded from '{self._model_path}'"
-                )
+                logger.info(f"Random Forest model loaded from '{self._model_path}'")
+                
         except Exception as exc:
             import traceback
             err_msg = traceback.format_exc()

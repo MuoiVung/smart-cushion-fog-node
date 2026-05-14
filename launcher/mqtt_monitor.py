@@ -104,7 +104,7 @@ class MQTTMonitor:
         else:
             self._log(f"⚠️ Cannot publish config: MQTT monitor not connected")
 
-    def publish_model_reload(self, model_path: str, scaler_path: str) -> bool:
+    def publish_model_reload(self, model_type: str, model_path: str, scaler_path: str) -> bool:
         """
         Publish a hot-reload command to the Fog Node.
 
@@ -117,6 +117,7 @@ class MQTTMonitor:
         if self._client and self._connected:
             from pathlib import Path
             payload = json.dumps({
+                "model_type":  model_type,
                 "model_path":  model_path,
                 "scaler_path": scaler_path,
             })
