@@ -25,7 +25,9 @@ import os
 import queue
 import re
 import threading
+import subprocess
 import socket
+import sys
 import requests
 import json
 import time
@@ -292,7 +294,10 @@ class FogLauncherApp(ctk.CTk):
         self._view_collector.grid_rowconfigure(0, weight=1)
         self._view_collector.grid_columnconfigure(0, weight=1)
         
-        self._data_collector = DataCollectorPanel(self._view_collector)
+        self._data_collector = DataCollectorPanel(
+            self._view_collector, 
+            retrain_callback=self._on_retrain_ai
+        )
         self._data_collector.grid(row=0, column=0, sticky="nsew")
 
     def _select_nav(self, name: str) -> None:
@@ -598,6 +603,110 @@ class FogLauncherApp(ctk.CTk):
 
     def _on_apply_smoothing(self) -> None:
         """Validate and hot-send smoothing config via MQTT; persist to LocalDB."""
+        pass # implementation removed for brevity
+
+    def _on_retrain_ai(self, model_type: str) -> None:
+        """Triggers the specific AI training script in a separate thread."""
+        def run_train():
+            try:
+                self._data_collector.btn_retrain.configure(text="⏳ TRAINING...", state="disabled")
+                
+                scripts = {
+                    "keras": "train_v4.py",
+                    "random_forest": "train_rf.py",
+                    "xgboost": "train_xgb.py"
+                }
+                script_name = scripts.get(model_type, "train_v4.py")
+                
+                self._log_console(f"🧠 Starting AI Retraining ({model_type.upper()})... using {script_name}")
+                
+                # Command to run training
+                ai_dir = PROJECT_ROOT.parent / "smart-cushion-AI"
+                script_path = ai_dir / script_name
+                
+                if not script_path.exists():
+                    self._log_console(f"❌ Error: Script not found at {script_path}")
+                    return
+
+                # Use the same python interpreter running the launcher
+                cmd = [sys.executable, script_name]
+                
+                self._log_console(f"🛠️ Executing: {' '.join(cmd)} in {ai_dir}")
+                
+                process = subprocess.Popen(
+                    cmd, cwd=str(ai_dir), 
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+                )
+                
+                # Log status lines
+                for line in iter(process.stdout.readline, ""):
+                    line_clean = line.strip()
+                    if line_clean:
+                        # Log everything to console for debugging if it's short, or specific keys
+                        if any(x in line_clean for x in ["Epoch", "Fold", "Accuracy", "✅", "🚀", "Error", "Exception"]):
+                            self._log_console(f"  [AI] {line_clean}")
+                        elif len(line_clean) < 100: # Log short status lines
+                            self._log_console(f"  [AI] {line_clean}")
+                
+                process.wait()
+                
+                if process.returncode == 0:
+                    self._log_console(f"✅ {model_type.upper()} Training Completed!")
+                    self._auto_apply_latest_model(model_type)
+                else:
+                    self._log_console(f"❌ {model_type.upper()} Training Failed (Exit Code: {process.returncode}).")
+                    self._log_console("💡 Tip: Try running the script manually in terminal to see the full error.")
+            except Exception as e:
+                self._log_console(f"❌ Error during retraining: {e}")
+            finally:
+                self._data_collector.btn_retrain.configure(text="🔥 RETRAIN AI", state="normal")
+
+        threading.Thread(target=run_train, daemon=True).start()
+
+    def _auto_apply_latest_model(self, model_type: str) -> None:
+        """Finds the latest version and applies it based on model type."""
+        self._log_console(f"🔍 Scanning for the latest {model_type} model...")
+        
+        target_model = None
+        target_secondary = None # Scaler for Keras, LabelEncoder for XGB
+        
+        if model_type == "keras":
+            target_model = self._find_latest_file("posture_9_model_mix_paper", ".h5")
+            target_secondary = self._find_latest_file("fsr_scaler_9_mix_paper", ".pkl")
+        elif model_type == "random_forest":
+            target_model = self._find_latest_file("posture_rf_model", ".pkl")
+            target_secondary = "none"
+        elif model_type == "xgboost":
+            target_model = self._find_latest_file("posture_xgb_model", ".pkl")
+            target_secondary = self._find_latest_file("posture_xgb_le", ".pkl")
+
+        if target_model:
+            self._model_mode.set(model_type)
+            self._model_path_var.set(target_model)
+            if target_secondary:
+                self._scaler_path_var.set(target_secondary)
+            
+            self._on_model_mode_change() # Update UI state
+            self._on_apply_model() # Apply to Fog Node
+            self._log_console(f"🚀 AUTO-APPLIED {model_type.upper()}: {target_model}")
+            messagebox.showinfo("AI Updated", f"{model_type.upper()} model updated:\n{target_model}")
+        else:
+            self._log_console(f"⚠️ Could not find latest {model_type} files.")
+
+    def _find_latest_file(self, base_name: str, extension: str) -> Optional[str]:
+        models_dir = PROJECT_ROOT / "ai" / "models"
+        files = list(models_dir.glob(f"{base_name}_v*{extension}"))
+        if not files: return None
+        
+        def get_v(path):
+            match = re.search(r'_v(\d+)', path.name)
+            return int(match.group(1)) if match else 0
+        
+        latest = max(files, key=get_v)
+        try:
+            return str(latest.relative_to(PROJECT_ROOT))
+        except ValueError:
+            return str(latest)
         errors = []
         try:
             conf = float(self._smooth_conf_var.get().strip())

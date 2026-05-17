@@ -31,8 +31,10 @@ LABEL_MAP = {
 }
 
 class DataCollectorPanel(ctk.CTkFrame):
-    def __init__(self, master, fg_color="transparent"):
+    def __init__(self, master, fg_color="transparent", retrain_callback=None):
         super().__init__(master, fg_color=fg_color)
+        # retrain_callback will now receive (model_type)
+        self.retrain_callback = retrain_callback
         
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(2, weight=1)
@@ -182,12 +184,32 @@ class DataCollectorPanel(ctk.CTkFrame):
         frame.grid(row=2, column=0, padx=20, pady=10, sticky="nsew")
         frame.grid_columnconfigure(0, weight=1)
 
+        btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        btn_frame.grid(row=0, column=0, pady=10)
+
         self.btn_action = ctk.CTkButton(
-            frame, text="▶ START COLLECTION", font=ctk.CTkFont(size=14, weight="bold"),
+            btn_frame, text="▶ START COLLECTION", font=ctk.CTkFont(size=14, weight="bold"),
             fg_color="#3fb950", hover_color="#2ea043", text_color="white", height=40,
             command=self._toggle_collection
         )
-        self.btn_action.grid(row=0, column=0, pady=10)
+        self.btn_action.grid(row=0, column=0, padx=5)
+
+        # Model type for retraining
+        self.retrain_type_var = ctk.StringVar(value="CNN (Keras)")
+        self.retrain_combo = ctk.CTkComboBox(
+            btn_frame, 
+            values=["CNN (Keras)", "Random Forest", "XGBoost"],
+            variable=self.retrain_type_var,
+            width=140, height=40
+        )
+        self.retrain_combo.grid(row=0, column=1, padx=5)
+
+        self.btn_retrain = ctk.CTkButton(
+            btn_frame, text="🔥 RETRAIN AI", font=ctk.CTkFont(size=14, weight="bold"),
+            fg_color="#d29922", hover_color="#b0801a", text_color="white", height=40,
+            command=self._on_retrain_click
+        )
+        self.btn_retrain.grid(row=0, column=2, padx=5)
 
         self.status_label = ctk.CTkLabel(frame, text="Ready to collect data...", font=ctk.CTkFont(size=14))
         self.status_label.grid(row=1, column=0, pady=5)
@@ -198,6 +220,16 @@ class DataCollectorPanel(ctk.CTkFrame):
         self.progress_bar = ctk.CTkProgressBar(frame, mode="determinate")
         self.progress_bar.set(0)
         self.progress_bar.grid(row=3, column=0, sticky="ew", padx=40)
+
+    def _on_retrain_click(self):
+        if self.retrain_callback:
+            mapping = {
+                "CNN (Keras)": "keras",
+                "Random Forest": "random_forest",
+                "XGBoost": "xgboost"
+            }
+            m_type = mapping.get(self.retrain_type_var.get(), "keras")
+            self.retrain_callback(m_type)
 
     # ── Logic ──────────────────────────────────────────────────────────
 
