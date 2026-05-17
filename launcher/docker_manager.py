@@ -162,8 +162,10 @@ class DockerManager:
                     self._log(f"⚠️ Could not start Mosquitto automatically: {e}. Ensure it is running manually.")
 
                 # 2. Start Python App
+                is_frozen = getattr(sys, 'frozen', False)
+                app_cmd = [sys.executable, "--backend"] if is_frozen else [sys.executable, "app.py"]
                 self._native_app_process = subprocess.Popen(
-                    [sys.executable, "app.py"],
+                    app_cmd,
                     cwd=str(self._root),
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,

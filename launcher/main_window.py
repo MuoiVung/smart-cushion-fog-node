@@ -630,7 +630,11 @@ class FogLauncherApp(ctk.CTk):
                     return
 
                 # Use the same python interpreter running the launcher
-                cmd = [sys.executable, str(script_path), dataset_path]
+                is_frozen = getattr(sys, 'frozen', False)
+                if is_frozen:
+                    cmd = [sys.executable, "--train", model_type, dataset_path]
+                else:
+                    cmd = [sys.executable, str(script_path), dataset_path]
                 
                 exec_msg = f"🛠️ Executing: {' '.join(cmd)} in {PROJECT_ROOT}"
                 self._log_console(exec_msg)
