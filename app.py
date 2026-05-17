@@ -25,6 +25,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+import utils.paths as paths
 
 from ai.inference_engine import InferenceEngine
 from ai.preprocessor import Preprocessor
@@ -89,8 +90,8 @@ class FogApplication:
 
         # Read model paths from DB (source of truth); fall back to .env on first run
         _model_type  = self._local_db.get_config("model_type",  "keras") # We don't have settings.model_type yet, default to keras
-        _model_path  = self._local_db.get_config("model_path",  settings.model_path)
-        _scaler_path = self._local_db.get_config("scaler_path", settings.scaler_path)
+        _model_path  = paths.resolve_model_path(self._local_db.get_config("model_path",  settings.model_path))
+        _scaler_path = paths.resolve_model_path(self._local_db.get_config("scaler_path", settings.scaler_path))
         self._inference = InferenceEngine(
             model_type  = _model_type,
             model_path  = _model_path,
@@ -315,8 +316,11 @@ class FogApplication:
                 logger.error("[HOT-RELOAD] Missing model_path or scaler_path in payload")
                 return
 
-            mp = Path(new_model_path)
-            sp = Path(new_scaler_path) if new_model_type == "keras" else None
+            resolved_mp = paths.resolve_model_path(new_model_path)
+            resolved_sp = paths.resolve_model_path(new_scaler_path) if new_scaler_path else ""
+
+            mp = Path(resolved_mp)
+            sp = Path(resolved_sp) if resolved_sp else None
 
             if not mp.exists():
                 logger.error(f"[HOT-RELOAD] Model file not found: {mp}")

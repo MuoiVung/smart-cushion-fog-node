@@ -11,6 +11,10 @@ Usage:
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
+import utils.paths as paths
+
+# Initialize persistent directories and default templates
+paths.ensure_directories()
 
 
 class Settings(BaseSettings):
@@ -24,7 +28,7 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(paths.get_env_path()),
         env_file_encoding="utf-8",
         extra="ignore",   # Silently ignore unknown env vars
     )
@@ -123,6 +127,26 @@ class Settings(BaseSettings):
     def mqtt_broker_url(self) -> str:
         scheme = "mqtts" if self.mqtt_use_tls else "mqtt"
         return f"{scheme}://{self.mqtt_host}:{self.mqtt_port}"
+
+    @property
+    def model_path_resolved(self) -> str:
+        return paths.resolve_model_path(self.model_path)
+
+    @property
+    def scaler_path_resolved(self) -> str:
+        return paths.resolve_model_path(self.scaler_path)
+
+    @property
+    def aws_cert_path_resolved(self) -> str:
+        return paths.resolve_model_path(self.aws_cert_path)
+
+    @property
+    def aws_key_path_resolved(self) -> str:
+        return paths.resolve_model_path(self.aws_key_path)
+
+    @property
+    def aws_ca_path_resolved(self) -> str:
+        return paths.resolve_model_path(self.aws_ca_path)
 
 
 # Singleton instance – import this everywhere instead of creating new Settings()

@@ -12,9 +12,11 @@ import tkinter.filedialog as filedialog
 import customtkinter as ctk
 import pandas as pd
 
-PROJECT_ROOT = Path(__file__).parent.parent
-LABELS_FILE = PROJECT_ROOT / "launcher" / "saved_labels.json"
-EXPORT_DIR = PROJECT_ROOT / "data_exports"
+import utils.paths as paths
+
+PROJECT_ROOT = paths.DATA_ROOT
+LABELS_FILE = paths.get_labels_file()
+EXPORT_DIR = paths.get_export_dir()
 
 LABEL_MAP = {
     "EMPTY (Cushion is empty)": "EMPTY",

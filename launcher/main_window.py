@@ -43,6 +43,7 @@ from launcher.ws_monitor import WebSocketMonitor
 from launcher.dashboard_panel import DashboardPanel
 from launcher.data_collector_panel import DataCollectorPanel
 from core.local_db import LocalDB
+import utils.paths as paths
 
 # ── Theme ─────────────────────────────────────────────────────────────────
 ctk.set_appearance_mode("dark")
@@ -70,12 +71,13 @@ CHANNELS = [
     {"key": "ai_results",    "label": "🧠  AI Predictions", "color": COLOR["yellow"]},
 ]
 
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = paths.PROJECT_ROOT
+DATA_ROOT = paths.DATA_ROOT
 
 
 def _read_env(key: str, default: str = "") -> str:
     """Read a single key from the project .env file."""
-    env_path = PROJECT_ROOT / ".env"
+    env_path = paths.get_env_path()
     if not env_path.exists():
         return default
     for line in env_path.read_text(encoding="utf-8").splitlines():
@@ -86,7 +88,7 @@ def _read_env(key: str, default: str = "") -> str:
 
 def _write_env(key: str, value: str) -> None:
     """Update or add a key in the project .env file."""
-    env_path = PROJECT_ROOT / ".env"
+    env_path = paths.get_env_path()
     if not env_path.exists():
         return
     lines  = env_path.read_text(encoding="utf-8").splitlines()
@@ -710,8 +712,15 @@ class FogLauncherApp(ctk.CTk):
             self._log_console(f"⚠️ Could not find latest {model_type} files.")
 
     def _find_latest_file(self, base_name: str, extension: str) -> Optional[str]:
-        models_dir = PROJECT_ROOT / "ai" / "models"
-        files = list(models_dir.glob(f"{base_name}_v*{extension}"))
+        persistent_dir = paths.get_models_dir()
+        bundled_dir = PROJECT_ROOT / "ai" / "models"
+        
+        files = []
+        if persistent_dir.exists():
+            files.extend(list(persistent_dir.glob(f"{base_name}_v*{extension}")))
+        if bundled_dir.exists():
+            files.extend(list(bundled_dir.glob(f"{base_name}_v*{extension}")))
+            
         if not files: return None
         
         def get_v(path):
@@ -720,9 +729,12 @@ class FogLauncherApp(ctk.CTk):
         
         latest = max(files, key=get_v)
         try:
-            return str(latest.relative_to(PROJECT_ROOT))
+            return str(latest.relative_to(paths.DATA_ROOT))
         except ValueError:
-            return str(latest)
+            try:
+                return str(latest.relative_to(PROJECT_ROOT))
+            except ValueError:
+                return str(latest)
         errors = []
         try:
             conf = float(self._smooth_conf_var.get().strip())
@@ -1100,7 +1112,7 @@ class FogLauncherApp(ctk.CTk):
         path = filedialog.askopenfilename(
             title=title,
             filetypes=ftypes,
-            initialdir=str(PROJECT_ROOT / "ai" / "models"),
+            initialdir=str(paths.get_models_dir()),
         )
         if path:
             self._model_path_var.set(path)
@@ -1123,7 +1135,7 @@ class FogLauncherApp(ctk.CTk):
         path = filedialog.askopenfilename(
             title="Select Scaler (.pkl)",
             filetypes=[("Pickle Scaler", "*.pkl"), ("All Files", "*")],
-            initialdir=str(PROJECT_ROOT / "ai" / "models"),
+            initialdir=str(paths.get_models_dir()),
         )
         if path:
             self._scaler_path_var.set(path)
@@ -1173,35 +1185,46 @@ class FogLauncherApp(ctk.CTk):
             model_path  = self._model_path_var.get().strip()
             scaler_path = self._scaler_path_var.get().strip() if mode == "keras" else "none"
 
-            # Validate model file
-            if not Path(model_path).exists() and not Path(PROJECT_ROOT / model_path).exists():
+            # Validate model file using dynamic resolution
+            resolved_model = paths.resolve_model_path(model_path)
+            if not Path(resolved_model).exists():
                 messagebox.showwarning(
                     "Model Not Found",
                     f"Model file not found:\n{model_path}\n\nPlease browse for a valid model file.",
                 )
                 return
 
-            # Validate scaler file
-            if mode == "keras" and not Path(scaler_path).exists() and not Path(PROJECT_ROOT / scaler_path).exists():
+            # Validate scaler file using dynamic resolution
+            resolved_scaler = paths.resolve_model_path(scaler_path) if scaler_path != "none" else ""
+            if mode == "keras" and not Path(resolved_scaler).exists():
                 messagebox.showwarning(
                     "Scaler Not Found",
                     f"Scaler file not found:\n{scaler_path}\n\nPlease browse for the matching .pkl file.",
                 )
                 return
 
-            # Convert to relative paths if within project root for Docker compatibility
+            # Convert to relative paths if within persistent or project root for compatibility
             try:
-                rel_model = Path(model_path).relative_to(PROJECT_ROOT)
+                rel_model = Path(model_path).relative_to(paths.DATA_ROOT)
                 model_path = str(rel_model)
             except ValueError:
-                pass # Not within project root, keep absolute
+                try:
+                    rel_model = Path(model_path).relative_to(PROJECT_ROOT)
+                    model_path = str(rel_model)
+                except ValueError:
+                    pass # Keep absolute
                 
             try:
                 if scaler_path != "none":
-                    rel_scaler = Path(scaler_path).relative_to(PROJECT_ROOT)
+                    rel_scaler = Path(scaler_path).relative_to(paths.DATA_ROOT)
                     scaler_path = str(rel_scaler)
             except ValueError:
-                pass # Not within project root, keep absolute
+                try:
+                    if scaler_path != "none":
+                        rel_scaler = Path(scaler_path).relative_to(PROJECT_ROOT)
+                        scaler_path = str(rel_scaler)
+                except ValueError:
+                    pass # Keep absolute
 
             # Persist to DB (sole source of truth for model paths)
             self._db.set_config("model_type",  mode)

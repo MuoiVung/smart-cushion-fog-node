@@ -16,9 +16,11 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 
+import utils.paths as paths
+
 logger = logging.getLogger(__name__)
 
-_DB_PATH = Path(__file__).parent.parent / "data" / "fog_local.db"
+_DB_PATH = paths.get_db_path()
 
 
 class LocalDB:
