@@ -55,7 +55,7 @@ def paper_based_filter(df, noise_threshold=20):
     df_clean = df.iloc[crop_frames:-crop_frames].copy()
     
     active_sensors_count = (df_clean[fsr_cols] > noise_threshold).sum(axis=1)
-    df_clean = df_clean[active_sensors_count >= 5]
+    df_clean = df_clean[active_sensors_count >= 3]
     
     if df_clean.empty:
         return df_clean
@@ -196,6 +196,12 @@ def train_5_fold_cv(X_all, y_all, groups_all):
             best_scaler = scaler
             
         fold_no += 1
+
+    # --- FALLBACK FOR EXTREMELY SMALL / SINGLE-CLASS DATASETS ---
+    if best_model is None:
+        print("\n⚠️ WARNING: All folds resulted in 0.0% validation accuracy (often due to small/imbalanced datasets). Using the last fold's model as a fallback.")
+        best_model = model
+        best_scaler = scaler
 
     print("\n" + "="*50)
     print("SUMMARY OF 5-FOLD CROSS VALIDATION RESULTS")

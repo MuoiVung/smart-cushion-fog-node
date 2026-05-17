@@ -139,6 +139,11 @@ def train_rf_cv(X_all, y_all, groups_all):
             
         fold_no += 1
 
+    # --- FALLBACK FOR EXTREMELY SMALL / SINGLE-CLASS DATASETS ---
+    if best_model is None:
+        print("\n⚠️ WARNING: All folds resulted in 0.0% validation accuracy (often due to small/imbalanced datasets). Using the last fold's model as a fallback.")
+        best_model = rf_model
+
     print("\n" + "="*50)
     print("SUMMARY OF RANDOM FOREST RESULTS")
     print("="*50)

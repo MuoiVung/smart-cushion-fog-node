@@ -163,9 +163,9 @@ class DataCollectorPanel(ctk.CTkFrame):
     def _get_train_dataset_options(self) -> List[str]:
         options = ["All Folders"]
         try:
-            export_path = Path(self.export_dir_var.get())
-            if export_path.exists():
-                for p in export_path.iterdir():
+            train_root = EXPORT_DIR.resolve()
+            if train_root.exists():
+                for p in train_root.iterdir():
                     if p.is_dir() and not p.name.startswith("."):
                         options.append(p.name)
         except Exception:
@@ -310,10 +310,11 @@ class DataCollectorPanel(ctk.CTkFrame):
             m_type = mapping.get(self.retrain_type_var.get(), "keras")
             
             selected_ds = self.train_dataset_var.get()
+            train_root = EXPORT_DIR.resolve()
             if selected_ds == "All Folders":
-                ds_path = self.export_dir_var.get()
+                ds_path = str(train_root)
             else:
-                ds_path = str(Path(self.export_dir_var.get()) / selected_ds)
+                ds_path = str(train_root / selected_ds)
                 
             self.retrain_callback(m_type, ds_path)
 
