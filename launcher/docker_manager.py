@@ -176,7 +176,28 @@ class DockerManager:
                         for line in proc.stdout:
                             stripped = line.rstrip()
                             if stripped:
-                                self._log(f"[{prefix}] {stripped}")
+                                upper_stripped = stripped.upper()
+                                # Specifically exclude routine AI predictions and sklearn warnings to keep console clean
+                                if any(x in stripped for x in ["[AI] ✅", "[AI] ⚠️", "UserWarning:", "warnings.warn("]):
+                                    continue
+                                if "TOTAL_P=" in upper_stripped or "CONF=" in upper_stripped:
+                                    continue
+                                
+                                # Filter: only show important logs in the console
+                                # Hide routine AI predictions and MQTT debug logs
+                                is_important = any(word in upper_stripped for word in [
+                                    "ERROR", "CRITICAL", "FAILED", "WARNING", "SUCCESS", 
+                                    "READY", "STARTING", "STOPPED", "CONNECTED", "RELOADING", 
+                                    "HOT-RELOAD", "🔥", "❌", "✅", "🚀", "⚠️"
+                                ])
+                                
+                                # Include standard startup informative printouts
+                                is_startup = any(word in upper_stripped for word in [
+                                    "LOADING", "BOUND", "LISTENING", "PORT", "VERSION", "RUNNING"
+                                ])
+                                
+                                if is_important or is_startup or "SYSTEM READY" in upper_stripped:
+                                    self._log(f"[{prefix}] {stripped}")
                                 
                 threading.Thread(target=log_output, args=(self._native_mosquitto_process, "MQTT"), daemon=True).start()
                 threading.Thread(target=log_output, args=(self._native_app_process, "APP"), daemon=True).start()

@@ -116,7 +116,7 @@ class InferenceEngine:
         self._scaler_path = Path(scaler_path) if scaler_path else None
         self._model = None
         self._scaler = None
-        self._le = None # Label Encoder for XGBoost/RF
+        self._le = None # Label Encoder for RF
         self._is_binary = True   # True until an 11-class model is available
 
         self._load_model()
@@ -209,8 +209,8 @@ class InferenceEngine:
                 scaled   = self._scaler.transform(input_df)     # (1, 9) MinMax scaled
                 cnn_in   = scaled.reshape(1, 3, 3, 1)           # reshape for Conv2D
                 predictions = self._model.predict(cnn_in, verbose=0)[0]
-            elif self._model_type in ["random_forest", "xgboost"]:
-                # Feature Engineering đồng bộ với train_rf.py và train_xgb.py
+            elif self._model_type == "random_forest":
+                # Feature Engineering đồng bộ với train_rf.py
                 raw_sensors = np.array(raw_sensors, dtype=np.float32)
                 row_sum = raw_sensors.sum()
                 if row_sum == 0: row_sum = 1
@@ -228,18 +228,7 @@ class InferenceEngine:
                 # Tổng hợp 11 features: 9 raw + 2 engineered
                 input_final = np.hstack([rel_sensors, [fb_ratio, lr_ratio]]).reshape(1, -1)
                 
-                if self._model_type == "xgboost":
-                    pred_encoded = self._model.predict(input_final)[0]
-                    # Nếu có LabelEncoder, giải mã nhãn. Nếu không dùng nhãn gốc.
-                    if self._le:
-                        class_id = int(self._le.classes_[int(pred_encoded)])
-                    else:
-                        class_id = int(pred_encoded)
-                    
-                    # Tạo mảng xác suất giả lập hoặc lấy thật nếu cần
-                    predictions = self._model.predict_proba(input_final)[0]
-                else:
-                    predictions = self._model.predict_proba(input_final)[0]
+                predictions = self._model.predict_proba(input_final)[0]
             else:
                 raise ValueError(f"Unknown model type: {self._model_type}")
 
@@ -334,7 +323,7 @@ class InferenceEngine:
                     logger.info(
                         f"Keras {output_units}-class CNN loaded from '{self._model_path}'"
                     )
-            elif self._model_type in ["random_forest", "xgboost"]:
+            elif self._model_type == "random_forest":
                 # Nạp mô hình Pickle
                 self._model = joblib.load(str(self._model_path))
                 self._scaler = None

@@ -400,7 +400,7 @@ class FogLauncherApp(ctk.CTk):
 
         # ── Mode selector ─────────────────────────────────────────────────
         initial_mode = self._db.get_config("model_type", "keras")
-        if initial_mode not in ["keras", "random_forest", "xgboost"]:
+        if initial_mode not in ["keras", "random_forest"]:
             initial_mode = "keras"
         self._model_mode = ctk.StringVar(value=initial_mode)
 
@@ -417,13 +417,6 @@ class FogLauncherApp(ctk.CTk):
             font=ctk.CTkFont(size=12, weight="bold"),
             command=self._on_model_mode_change,
         ).grid(row=1, column=1, padx=8, pady=4, sticky="w")
-
-        ctk.CTkRadioButton(
-            frame, text="XGBoost (.pkl)",
-            variable=self._model_mode, value="xgboost",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            command=self._on_model_mode_change,
-        ).grid(row=1, column=2, padx=8, pady=4, sticky="w")
 
         # ── Row 2: Model file ───────────────────────────────────────
         self._model_lbl = ctk.CTkLabel(
@@ -611,55 +604,75 @@ class FogLauncherApp(ctk.CTk):
         def run_train():
             try:
                 self._data_collector.btn_retrain.configure(text="⏳ TRAINING...", state="disabled")
+                self._data_collector.clear_retrain_log()
                 
                 scripts = {
                     "keras": "train_v4.py",
-                    "random_forest": "train_rf.py",
-                    "xgboost": "train_xgb.py"
+                    "random_forest": "train_rf.py"
                 }
                 script_name = scripts.get(model_type, "train_v4.py")
                 
-                self._log_console(f"🧠 Starting AI Retraining ({model_type.upper()})... using {script_name}")
-                self._log_console(f"📁 Dataset Path: {dataset_path}")
+                start_msg = f"🧠 Starting AI Retraining ({model_type.upper()})... using {script_name}"
+                ds_msg = f"📁 Dataset Path: {dataset_path}"
+                self._log_console(start_msg)
+                self._log_console(ds_msg)
+                self._data_collector.write_retrain_log(start_msg)
+                self._data_collector.write_retrain_log(ds_msg)
                 
                 # Command to run training
                 ai_dir = PROJECT_ROOT / "ai"
                 script_path = ai_dir / script_name
                 
                 if not script_path.exists():
-                    self._log_console(f"❌ Error: Script not found at {script_path}")
+                    err = f"❌ Error: Script not found at {script_path}"
+                    self._log_console(err)
+                    self._data_collector.write_retrain_log(err)
                     return
 
                 # Use the same python interpreter running the launcher
                 cmd = [sys.executable, str(script_path), dataset_path]
                 
-                self._log_console(f"🛠️ Executing: {' '.join(cmd)} in {PROJECT_ROOT}")
+                exec_msg = f"🛠️ Executing: {' '.join(cmd)} in {PROJECT_ROOT}"
+                self._log_console(exec_msg)
+                self._data_collector.write_retrain_log(exec_msg)
+                self._data_collector.write_retrain_log("-" * 60)
                 
                 process = subprocess.Popen(
                     cmd, cwd=str(PROJECT_ROOT), 
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
                 )
                 
-                # Log status lines
+                # Log status lines in real-time
                 for line in iter(process.stdout.readline, ""):
                     line_clean = line.strip()
                     if line_clean:
-                        # Log everything to console for debugging if it's short, or specific keys
+                        # Log to system console selectively to avoid spamming
                         if any(x in line_clean for x in ["Epoch", "Fold", "Accuracy", "✅", "🚀", "Error", "Exception"]):
                             self._log_console(f"  [AI] {line_clean}")
-                        elif len(line_clean) < 100: # Log short status lines
+                        elif len(line_clean) < 100:
                             self._log_console(f"  [AI] {line_clean}")
+                        
+                        # Ghi toàn bộ logs thô vào TextBox chuyên dụng trên giao diện
+                        self._data_collector.write_retrain_log(line_clean)
                 
                 process.wait()
                 
+                self._data_collector.write_retrain_log("-" * 60)
                 if process.returncode == 0:
-                    self._log_console(f"✅ {model_type.upper()} Training Completed!")
+                    success_msg = f"✅ {model_type.upper()} Training Completed!"
+                    self._log_console(success_msg)
+                    self._data_collector.write_retrain_log(success_msg)
                     self._auto_apply_latest_model(model_type)
                 else:
-                    self._log_console(f"❌ {model_type.upper()} Training Failed (Exit Code: {process.returncode}).")
-                    self._log_console("💡 Tip: Try running the script manually in terminal to see the full error.")
+                    fail_msg = f"❌ {model_type.upper()} Training Failed (Exit Code: {process.returncode})."
+                    tip_msg = "💡 Tip: Scroll up in this log box or run the script manually in terminal to see the full error."
+                    self._log_console(fail_msg)
+                    self._data_collector.write_retrain_log(fail_msg)
+                    self._data_collector.write_retrain_log(tip_msg)
             except Exception as e:
-                self._log_console(f"❌ Error during retraining: {e}")
+                err_msg = f"❌ Error during retraining: {e}"
+                self._log_console(err_msg)
+                self._data_collector.write_retrain_log(err_msg)
             finally:
                 self._data_collector.btn_retrain.configure(text="🔥 RETRAIN AI", state="normal")
 
@@ -678,9 +691,6 @@ class FogLauncherApp(ctk.CTk):
         elif model_type == "random_forest":
             target_model = self._find_latest_file("posture_rf_model", ".pkl")
             target_secondary = "none"
-        elif model_type == "xgboost":
-            target_model = self._find_latest_file("posture_xgb_model", ".pkl")
-            target_secondary = self._find_latest_file("posture_xgb_le", ".pkl")
 
         if target_model:
             self._model_mode.set(model_type)
@@ -1046,7 +1056,7 @@ class FogLauncherApp(ctk.CTk):
                 self._scaler_browse_btn.configure(state="normal")
                 
             self._model_match_label.configure(text="")
-        elif mode in ["random_forest", "xgboost"]:
+        elif mode == "random_forest":
             self._model_lbl.configure(text="Model (.pkl):")
             self._model_entry.configure(state="normal")
             self._browse_btn.configure(state="normal")
@@ -1079,7 +1089,7 @@ class FogLauncherApp(ctk.CTk):
 
     def _on_browse_model(self) -> None:
         mode = self._model_mode.get()
-        is_pickle = mode in ["random_forest", "xgboost"]
+        is_pickle = (mode == "random_forest")
         ftypes = [("Pickle Model", "*.pkl"), ("All Files", "*")] if is_pickle else [("Keras Model", "*.h5 *.keras"), ("All Files", "*")]
         title = f"Select {mode.replace('_', ' ').title()} Model (.pkl)" if is_pickle else "Select Keras Model (.h5)"
         
@@ -1155,7 +1165,7 @@ class FogLauncherApp(ctk.CTk):
 
     def _on_apply_model(self) -> None:
         mode = self._model_mode.get()
-        if mode in ["keras", "random_forest", "xgboost"]:
+        if mode in ["keras", "random_forest"]:
             model_path  = self._model_path_var.get().strip()
             scaler_path = self._scaler_path_var.get().strip() if mode == "keras" else "none"
 

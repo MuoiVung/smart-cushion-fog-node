@@ -239,7 +239,7 @@ class DataCollectorPanel(ctk.CTkFrame):
         self.retrain_type_var = ctk.StringVar(value="CNN (Keras)")
         self.retrain_combo = ctk.CTkComboBox(
             btn_frame, 
-            values=["CNN (Keras)", "Random Forest", "XGBoost"],
+            values=["CNN (Keras)", "Random Forest"],
             variable=self.retrain_type_var,
             width=140, height=40
         )
@@ -262,12 +262,48 @@ class DataCollectorPanel(ctk.CTkFrame):
         self.progress_bar.set(0)
         self.progress_bar.grid(row=3, column=0, sticky="ew", padx=40)
 
+        # ── AI Retraining Logs UI ──
+        self.log_frame = ctk.CTkFrame(frame, corner_radius=12, fg_color="#161b22")
+        self.log_frame.grid(row=4, column=0, padx=20, pady=(15, 5), sticky="nsew")
+        self.log_frame.grid_columnconfigure(0, weight=1)
+        self.log_frame.grid_rowconfigure(1, weight=1)
+
+        ctk.CTkLabel(
+            self.log_frame, 
+            text="🤖 AI RETRAINING PROGRESS LOGS", 
+            font=ctk.CTkFont(size=12, weight="bold"), 
+            text_color="#d29922"
+        ).grid(row=0, column=0, padx=16, pady=(10, 5), sticky="w")
+
+        self.log_textbox = ctk.CTkTextbox(
+            self.log_frame, 
+            font=ctk.CTkFont(family="Courier", size=11),
+            fg_color="#0d1117",
+            text_color="#e6edf3",
+            height=200,
+            wrap="word",
+            corner_radius=8
+        )
+        self.log_textbox.grid(row=1, column=0, padx=16, pady=(0, 12), sticky="nsew")
+        self.log_textbox.insert("end", "Waiting for AI retraining to start...\n")
+        self.log_textbox.configure(state="disabled")
+
+    def write_retrain_log(self, message: str) -> None:
+        self.log_textbox.configure(state="normal")
+        self.log_textbox.insert("end", message + "\n")
+        self.log_textbox.see("end")
+        self.log_textbox.configure(state="disabled")
+
+    def clear_retrain_log(self) -> None:
+        self.log_textbox.configure(state="normal")
+        self.log_textbox.delete("1.0", "end")
+        self.log_textbox.configure(state="disabled")
+
     def _on_retrain_click(self):
         if self.retrain_callback:
             mapping = {
                 "CNN (Keras)": "keras",
-                "Random Forest": "random_forest",
-                "XGBoost": "xgboost"
+                "Random Forest": "random_forest"
             }
             m_type = mapping.get(self.retrain_type_var.get(), "keras")
             
