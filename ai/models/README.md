@@ -34,7 +34,3 @@ For auto-detection to work in the Launcher, use matching suffixes:
 3. **Scale**: Apply `.pkl` scaler.
 4. **Predict**: Inference via `.h5` model.
 
----
-
-## ⚠️ FALLBACK
-If no model is found or loading fails, the system uses a **Rule-based Stub** which uses FSR symmetry heuristics to detect occupancy and basic postures.

@@ -117,17 +117,11 @@ class InferenceEngine:
         self._model = None
         self._scaler = None
         self._le = None # Label Encoder for XGBoost/RF
-        self._use_stub = False
         self._is_binary = True   # True until an 11-class model is available
 
         self._load_model()
 
     # ── Public API ─────────────────────────────────────────────────────────
-
-    @property
-    def using_stub(self) -> bool:
-        """True when no trained model was found and the rule-based stub is active."""
-        return self._use_stub
 
     def reload(self, model_type: str, model_path: str, scaler_path: str) -> bool:
         """
@@ -142,7 +136,6 @@ class InferenceEngine:
         old_model_type = self._model_type
         old_model      = self._model
         old_scaler     = self._scaler
-        old_use_stub   = self._use_stub
         old_is_binary  = self._is_binary
         old_model_path = self._model_path
         old_scaler_path= self._scaler_path
@@ -152,16 +145,14 @@ class InferenceEngine:
         self._scaler_path = Path(scaler_path) if scaler_path else None
         self._model       = None
         self._scaler      = None
-        self._use_stub    = False
 
         self._load_model()
 
-        if self._use_stub and not (old_use_stub):
+        if self._model is None and old_model is not None:
             # New model failed to load — restore previous state
             self._model_type  = old_model_type
             self._model       = old_model
             self._scaler      = old_scaler
-            self._use_stub    = old_use_stub
             self._is_binary   = old_is_binary
             self._model_path  = old_model_path
             self._scaler_path = old_scaler_path
@@ -322,7 +313,6 @@ class InferenceEngine:
             )
             logger.error(error_text)
             print(error_text)
-            self._use_stub = True
             return
 
         try:
@@ -369,7 +359,6 @@ class InferenceEngine:
             print(error_text)
             self._model  = None
             self._scaler = None
-            self._use_stub = True
 
 
     # ── Private: rule-based fallback ───────────────────────────────────────

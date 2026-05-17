@@ -3,7 +3,7 @@ Fog Node Launcher – Main Window (CustomTkinter GUI)
 
 Cross-platform desktop application that provides a friendly GUI for:
   - Starting / stopping Docker Compose services
-  - Selecting the AI model (PyTorch file or rule-based stub)
+  - Selecting the AI model (Keras, Random Forest, or XGBoost)
   - Monitoring all 4 data channels in real time
   - Viewing console output from Docker
 
@@ -399,35 +399,31 @@ class FogLauncherApp(ctk.CTk):
         ).grid(row=0, column=0, columnspan=4, padx=16, pady=(14, 8), sticky="w")
 
         # ── Mode selector ─────────────────────────────────────────────────
-        self._model_mode = ctk.StringVar(value=self._db.get_config("model_type", "keras"))
-
-        ctk.CTkRadioButton(
-            frame, text="Rule-based Stub",
-            variable=self._model_mode, value="rule_based",
-            font=ctk.CTkFont(size=12),
-            command=self._on_model_mode_change,
-        ).grid(row=1, column=0, padx=16, pady=4, sticky="w")
+        initial_mode = self._db.get_config("model_type", "keras")
+        if initial_mode not in ["keras", "random_forest", "xgboost"]:
+            initial_mode = "keras"
+        self._model_mode = ctk.StringVar(value=initial_mode)
 
         ctk.CTkRadioButton(
             frame, text="Keras Model (.h5)",
             variable=self._model_mode, value="keras",
             font=ctk.CTkFont(size=12, weight="bold"),
             command=self._on_model_mode_change,
-        ).grid(row=1, column=1, padx=8, pady=4, sticky="w")
+        ).grid(row=1, column=0, padx=16, pady=4, sticky="w")
         
         ctk.CTkRadioButton(
             frame, text="Random Forest (.pkl)",
             variable=self._model_mode, value="random_forest",
             font=ctk.CTkFont(size=12, weight="bold"),
             command=self._on_model_mode_change,
-        ).grid(row=1, column=2, padx=8, pady=4, sticky="w")
+        ).grid(row=1, column=1, padx=8, pady=4, sticky="w")
 
         ctk.CTkRadioButton(
             frame, text="XGBoost (.pkl)",
             variable=self._model_mode, value="xgboost",
             font=ctk.CTkFont(size=12, weight="bold"),
             command=self._on_model_mode_change,
-        ).grid(row=1, column=3, padx=8, pady=4, sticky="w")
+        ).grid(row=1, column=2, padx=8, pady=4, sticky="w")
 
         # ── Row 2: Model file ───────────────────────────────────────
         self._model_lbl = ctk.CTkLabel(
@@ -1212,21 +1208,6 @@ class FogLauncherApp(ctk.CTk):
             # Fallback: MQTT not connected → restart fog node
             self._log_console("⚙️ MQTT offline — restarting Fog Node to apply model…")
             self._docker.restart_fog_node()
-        else:
-            # Rule-based stub mode
-            _write_env("MODEL_TYPE",  "rule_based")
-            _write_env("MODEL_PATH",  "ai/models/dummy_model.h5")
-            _write_env("SCALER_PATH", "ai/models/dummy_scaler.pkl")
-            self._db.set_config("model_type",  "rule_based")
-            self._log_console("AI Mode: Rule-based stub (model files will be ignored)")
-            if self._mqtt_connected:
-                self._mqtt_monitor.publish_model_reload(
-                    "rule_based",
-                    "ai/models/dummy_model.h5",
-                    "ai/models/dummy_scaler.pkl",
-                )
-            else:
-                self._docker.restart_fog_node()
 
 
     def _on_channel_menu_change(self, selected_label: str) -> None:
