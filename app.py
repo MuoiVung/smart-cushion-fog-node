@@ -151,6 +151,33 @@ class FogApplication:
         except* asyncio.CancelledError:
             pass
         finally:
+            # --- SAFE SESSION FINALIZATION ON ABRUPT SHUTDOWN ---
+            if self._session_start is not None and self._session_id:
+                logger.info(f"⚠️ Abrupt shutdown detected! Force-finalizing active session: {self._session_id}")
+                try:
+                    end_time = datetime.now(timezone.utc)
+                    end_time_iso = end_time.isoformat()
+                    
+                    # Log session ended event
+                    self._local_db.log_event(
+                        session_id=self._session_id,
+                        timestamp_iso=end_time_iso,
+                        event_type=EventType.SESSION_ENDED,
+                        details={"reason": "system_shutdown"}
+                    )
+                    
+                    # Compute session summary and save locally to SQLite
+                    summary = self._session_manager.get_summary(settings.device_id, end_time_iso, self._alert_count)
+                    self._local_db.save_summary(summary)
+                    logger.info(f"✅ Active session {self._session_id} successfully saved to SQLite on shutdown.")
+                    
+                    # Attempt to sync to cloud immediately if still connected
+                    if settings.cloud_enabled and self._cloud_sync.is_connected:
+                        await self._cloud_sync.publish_summary(summary)
+                        logger.info("✅ Session summary successfully synced to AWS Cloud on shutdown.")
+                except Exception as e:
+                    logger.error(f"Error while force-saving active session on exit: {e}")
+
             logger.info("Stopping MQTT client...")
             mqtt_client.stop()
             await self._cloud_ws_relay.stop()
