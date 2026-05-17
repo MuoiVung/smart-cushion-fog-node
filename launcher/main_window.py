@@ -307,6 +307,10 @@ class FogLauncherApp(ctk.CTk):
             "config": self._view_config,
             "monitor": self._view_monitor
         }
+        
+        if name == "collector" and hasattr(self, "_data_collector"):
+            self._data_collector.refresh_train_dataset_options()
+            
         for k, v in views.items():
             if k == name:
                 v.grid()
@@ -455,10 +459,11 @@ class FogLauncherApp(ctk.CTk):
         self._browse_btn.grid(row=2, column=3, padx=(0, 8), pady=4)
 
         # ── Row 3: Scaler file (.pkl) ─────────────────────────────────────
-        ctk.CTkLabel(
+        self._scaler_lbl = ctk.CTkLabel(
             frame, text="Scaler (.pkl):",
             font=ctk.CTkFont(size=11), text_color=COLOR["muted"],
-        ).grid(row=3, column=0, padx=16, pady=4, sticky="e")
+        )
+        self._scaler_lbl.grid(row=3, column=0, padx=16, pady=4, sticky="e")
 
         self._scaler_path_var = ctk.StringVar(
             value=self._db.get_config("scaler_path", _read_env("SCALER_PATH", "ai/models/fsr_scaler_9.pkl"))
@@ -605,7 +610,7 @@ class FogLauncherApp(ctk.CTk):
         """Validate and hot-send smoothing config via MQTT; persist to LocalDB."""
         pass # implementation removed for brevity
 
-    def _on_retrain_ai(self, model_type: str) -> None:
+    def _on_retrain_ai(self, model_type: str, dataset_path: str) -> None:
         """Triggers the specific AI training script in a separate thread."""
         def run_train():
             try:
@@ -619,9 +624,10 @@ class FogLauncherApp(ctk.CTk):
                 script_name = scripts.get(model_type, "train_v4.py")
                 
                 self._log_console(f"🧠 Starting AI Retraining ({model_type.upper()})... using {script_name}")
+                self._log_console(f"📁 Dataset Path: {dataset_path}")
                 
                 # Command to run training
-                ai_dir = PROJECT_ROOT.parent / "smart-cushion-AI"
+                ai_dir = PROJECT_ROOT / "ai"
                 script_path = ai_dir / script_name
                 
                 if not script_path.exists():
@@ -629,12 +635,12 @@ class FogLauncherApp(ctk.CTk):
                     return
 
                 # Use the same python interpreter running the launcher
-                cmd = [sys.executable, script_name]
+                cmd = [sys.executable, str(script_path), dataset_path]
                 
-                self._log_console(f"🛠️ Executing: {' '.join(cmd)} in {ai_dir}")
+                self._log_console(f"🛠️ Executing: {' '.join(cmd)} in {PROJECT_ROOT}")
                 
                 process = subprocess.Popen(
-                    cmd, cwd=str(ai_dir), 
+                    cmd, cwd=str(PROJECT_ROOT), 
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
                 )
                 
@@ -1032,14 +1038,31 @@ class FogLauncherApp(ctk.CTk):
             self._model_lbl.configure(text="Model (.h5):")
             self._model_entry.configure(state="normal")
             self._browse_btn.configure(state="normal")
-            self._scaler_entry.configure(state="normal")
-            self._scaler_browse_btn.configure(state="normal")
+            
+            # Show scaler elements
+            if hasattr(self, "_scaler_lbl"):
+                self._scaler_lbl.grid(row=3, column=0, padx=16, pady=4, sticky="e")
+            if hasattr(self, "_scaler_entry"):
+                self._scaler_entry.grid(row=3, column=1, columnspan=2, padx=8, pady=4, sticky="ew")
+                self._scaler_entry.configure(state="normal")
+            if hasattr(self, "_scaler_browse_btn"):
+                self._scaler_browse_btn.grid(row=3, column=3, padx=(0, 8), pady=4)
+                self._scaler_browse_btn.configure(state="normal")
+                
+            self._model_match_label.configure(text="")
         elif mode in ["random_forest", "xgboost"]:
             self._model_lbl.configure(text="Model (.pkl):")
             self._model_entry.configure(state="normal")
             self._browse_btn.configure(state="normal")
-            self._scaler_entry.configure(state="disabled")
-            self._scaler_browse_btn.configure(state="disabled")
+            
+            # Hide scaler elements
+            if hasattr(self, "_scaler_lbl"):
+                self._scaler_lbl.grid_forget()
+            if hasattr(self, "_scaler_entry"):
+                self._scaler_entry.grid_forget()
+            if hasattr(self, "_scaler_browse_btn"):
+                self._scaler_browse_btn.grid_forget()
+                
             self._model_match_label.configure(
                 text=f"ℹ️ {mode.replace('_', ' ').title()} does not require a Scaler file.", 
                 text_color=COLOR["blue"]
@@ -1047,8 +1070,15 @@ class FogLauncherApp(ctk.CTk):
         else:
             self._model_entry.configure(state="disabled")
             self._browse_btn.configure(state="disabled")
-            self._scaler_entry.configure(state="disabled")
-            self._scaler_browse_btn.configure(state="disabled")
+            
+            # Hide scaler elements
+            if hasattr(self, "_scaler_lbl"):
+                self._scaler_lbl.grid_forget()
+            if hasattr(self, "_scaler_entry"):
+                self._scaler_entry.grid_forget()
+            if hasattr(self, "_scaler_browse_btn"):
+                self._scaler_browse_btn.grid_forget()
+                
             self._model_match_label.configure(text="")
 
     def _on_browse_model(self) -> None:

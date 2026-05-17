@@ -137,10 +137,41 @@ class DataCollectorPanel(ctk.CTkFrame):
         self.btn_browse = ctk.CTkButton(dir_frame, text="Browse...", width=80, command=self._browse_directory)
         self.btn_browse.grid(row=0, column=1)
 
+        # Training Dataset Selection
+        ctk.CTkLabel(frame, text="Train Dataset:", font=ctk.CTkFont(size=13)).grid(row=5, column=0, padx=16, pady=(6, 14), sticky="w")
+        self.train_dataset_var = ctk.StringVar(value="All Folders")
+        self.train_dataset_combo = ctk.CTkComboBox(
+            frame, 
+            values=self._get_train_dataset_options(),
+            variable=self.train_dataset_var,
+            width=250
+        )
+        self.train_dataset_combo.grid(row=5, column=1, padx=16, pady=(6, 14), sticky="w")
+
+    def _get_train_dataset_options(self) -> List[str]:
+        options = ["All Folders"]
+        try:
+            export_path = Path(self.export_dir_var.get())
+            if export_path.exists():
+                for p in export_path.iterdir():
+                    if p.is_dir() and not p.name.startswith("."):
+                        options.append(p.name)
+        except Exception:
+            pass
+        return options
+
+    def refresh_train_dataset_options(self):
+        opts = self._get_train_dataset_options()
+        if hasattr(self, "train_dataset_combo"):
+            self.train_dataset_combo.configure(values=opts)
+            if self.train_dataset_var.get() not in opts:
+                self.train_dataset_var.set("All Folders")
+
     def _browse_directory(self):
         selected_dir = filedialog.askdirectory(initialdir=self.export_dir_var.get(), title="Select Export Folder")
         if selected_dir:
             self.export_dir_var.set(selected_dir)
+            self.refresh_train_dataset_options()
 
     def _build_columns_panel(self):
         frame = ctk.CTkFrame(self, corner_radius=12)
@@ -229,7 +260,14 @@ class DataCollectorPanel(ctk.CTkFrame):
                 "XGBoost": "xgboost"
             }
             m_type = mapping.get(self.retrain_type_var.get(), "keras")
-            self.retrain_callback(m_type)
+            
+            selected_ds = self.train_dataset_var.get()
+            if selected_ds == "All Folders":
+                ds_path = self.export_dir_var.get()
+            else:
+                ds_path = str(Path(self.export_dir_var.get()) / selected_ds)
+                
+            self.retrain_callback(m_type, ds_path)
 
     # ── Logic ──────────────────────────────────────────────────────────
 
@@ -346,6 +384,7 @@ class DataCollectorPanel(ctk.CTkFrame):
         filepath = self._export_to_excel()
         if filepath:
             self.status_label.configure(text=f"Successfully saved: {filepath.name}", text_color="#3fb950")
+            self.refresh_train_dataset_options()
         else:
             self.status_label.configure(text="Error saving Excel file!", text_color="#f85149")
 
