@@ -291,9 +291,8 @@ class FogLauncherApp(ctk.CTk):
         self._build_console_panel(self._view_monitor)
 
     def _build_data_collector_view(self) -> None:
-        self._view_collector = ctk.CTkFrame(self.main_content_frame, fg_color="transparent")
+        self._view_collector = ctk.CTkScrollableFrame(self.main_content_frame, fg_color="transparent")
         self._view_collector.grid(row=0, column=0, sticky="nsew")
-        self._view_collector.grid_rowconfigure(0, weight=1)
         self._view_collector.grid_columnconfigure(0, weight=1)
         
         self._data_collector = DataCollectorPanel(
