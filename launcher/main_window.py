@@ -267,7 +267,7 @@ class FogLauncherApp(ctk.CTk):
         self._dashboard = self._dashboard_panel
 
     def _build_config_view(self) -> None:
-        self._view_config = ctk.CTkFrame(self.main_content_frame, fg_color="transparent")
+        self._view_config = ctk.CTkScrollableFrame(self.main_content_frame, fg_color="transparent")
         self._view_config.grid(row=0, column=0, sticky="nsew")
         self._view_config.grid_columnconfigure(0, weight=1)
 
