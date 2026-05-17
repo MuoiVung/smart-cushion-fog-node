@@ -1505,7 +1505,10 @@ class FogLauncherApp(ctk.CTk):
             # We overwrite local_ip with ngrok_url if available so Web App picks it up
             display_ip = ngrok_url if ngrok_url else local_ip
 
-            # 5. Send to Firebase
+            # 5. Send to Firebase (only if configured)
+            if not self.firebase_url.strip():
+                return
+                
             url = f"{self.firebase_url.rstrip('/')}/devices/{self.device_id}.json"
             payload = {
                 "local_ip": local_ip,
