@@ -140,13 +140,23 @@ class DataCollectorPanel(ctk.CTkFrame):
         # Training Dataset Selection
         ctk.CTkLabel(frame, text="Train Dataset:", font=ctk.CTkFont(size=13)).grid(row=5, column=0, padx=16, pady=(6, 14), sticky="w")
         self.train_dataset_var = ctk.StringVar(value="All Folders")
+        
+        ds_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        ds_frame.grid(row=5, column=1, padx=16, pady=(6, 14), sticky="ew")
+        ds_frame.grid_columnconfigure(0, weight=1)
+        
         self.train_dataset_combo = ctk.CTkComboBox(
-            frame, 
+            ds_frame, 
             values=self._get_train_dataset_options(),
             variable=self.train_dataset_var,
-            width=250
         )
-        self.train_dataset_combo.grid(row=5, column=1, padx=16, pady=(6, 14), sticky="w")
+        self.train_dataset_combo.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        
+        self.btn_refresh_ds = ctk.CTkButton(
+            ds_frame, text="🔄", width=36, height=32,
+            command=self.refresh_train_dataset_options
+        )
+        self.btn_refresh_ds.grid(row=0, column=1)
 
     def _get_train_dataset_options(self) -> List[str]:
         options = ["All Folders"]
