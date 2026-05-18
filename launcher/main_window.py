@@ -400,9 +400,9 @@ class FogLauncherApp(ctk.CTk):
         ).grid(row=0, column=0, columnspan=4, padx=16, pady=(14, 8), sticky="w")
 
         # ── Mode selector ─────────────────────────────────────────────────
-        initial_mode = self._db.get_config("model_type", "keras")
-        if initial_mode not in ["keras", "random_forest"]:
-            initial_mode = "keras"
+        initial_mode = self._db.get_config("model_type", "random_forest")
+        if initial_mode not in ["keras", "random_forest", "fnn", "tiny_cnn", "resnet"]:
+            initial_mode = "random_forest"
         self._model_mode = ctk.StringVar(value=initial_mode)
 
         ctk.CTkRadioButton(
@@ -417,7 +417,35 @@ class FogLauncherApp(ctk.CTk):
             variable=self._model_mode, value="random_forest",
             font=ctk.CTkFont(size=12, weight="bold"),
             command=self._on_model_mode_change,
+        ).grid(row=1, column=0, padx=16, pady=4, sticky="w")
+
+        ctk.CTkRadioButton(
+            frame, text="Hybrid FNN (.keras)",
+            variable=self._model_mode, value="fnn",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._on_model_mode_change,
         ).grid(row=1, column=1, padx=8, pady=4, sticky="w")
+
+        ctk.CTkRadioButton(
+            frame, text="Tiny CNN (.keras)",
+            variable=self._model_mode, value="tiny_cnn",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._on_model_mode_change,
+        ).grid(row=2, column=0, padx=16, pady=4, sticky="w")
+
+        ctk.CTkRadioButton(
+            frame, text="Micro ResNet (.keras)",
+            variable=self._model_mode, value="resnet",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._on_model_mode_change,
+        ).grid(row=2, column=1, padx=8, pady=4, sticky="w")
+
+        ctk.CTkRadioButton(
+            frame, text="Keras Legacy (.h5)",
+            variable=self._model_mode, value="keras",
+            font=ctk.CTkFont(size=12),
+            command=self._on_model_mode_change,
+        ).grid(row=2, column=2, padx=8, pady=4, sticky="w")
 
         # ── Row 2: Model file ───────────────────────────────────────
         self._model_lbl = ctk.CTkLabel(
@@ -608,10 +636,13 @@ class FogLauncherApp(ctk.CTk):
                 self._data_collector.clear_retrain_log()
                 
                 scripts = {
-                    "keras": "train_v4.py",
-                    "random_forest": "train_rf.py"
+                    "random_forest": "train_rf.py",
+                    "fnn":           "train_fnn.py",
+                    "tiny_cnn":      "train_tiny_cnn.py",
+                    "resnet":        "train_resnet.py",
+                    "keras":         "train_cnn_v4_deprecated.py",   # legacy
                 }
-                script_name = scripts.get(model_type, "train_v4.py")
+                script_name = scripts.get(model_type, "train_rf.py")
                 
                 start_msg = f"🧠 Starting AI Retraining ({model_type.upper()})... using {script_name}"
                 ds_msg = f"📁 Dataset Path: {dataset_path}"

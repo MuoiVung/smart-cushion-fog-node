@@ -89,6 +89,35 @@ _EMPTY_THRESHOLD  = 1000    # below this → empty (sum of all 9 ADC values)
 _OBJECT_THRESHOLD = 3000    # 1000 – 3000 → might be an object, not a person
 
 
+def _extract_22_features(raw_2d: np.ndarray) -> np.ndarray:
+    """
+    Convert (1, 9) raw FSR array into (1, 22) feature vector.
+    Identical to extract_features() in train_rf.py / train_fnn.py.
+
+    Layout: [FL(0), FM(1), FR(2), ML(3), MM(4), MR(5), BL(6), BM(7), BR(8)]
+    """
+    f  = raw_2d.astype(float)
+    ts = np.where(f.sum(1, keepdims=True) == 0, 1.0, f.sum(1, keepdims=True)).squeeze(1)
+
+    front = f[:, [0, 1, 2]].sum(1);  back  = f[:, [6, 7, 8]].sum(1)
+    left  = f[:, [0, 3, 6]].sum(1);  right = f[:, [2, 5, 8]].sum(1)
+    mid_r = f[:, [3, 4, 5]].sum(1)
+
+    cop_x     = (right - left) / ts
+    cop_y     = (front - back) / ts
+    diag_diff = ((f[:, 0] + f[:, 4] + f[:, 8]) -
+                 (f[:, 2] + f[:, 4] + f[:, 6])) / ts
+
+    eng = np.stack([
+        cop_x, cop_y, diag_diff,
+        f.std(1), f.max(1), f.min(1), f.var(1),
+        front / ts, back / ts, left / ts, right / ts,
+        mid_r / ts, f[:, 4] / ts,
+    ], axis=1)                          # (1, 13)
+
+    return np.concatenate([f, eng], axis=1)   # (1, 22)
+
+
 class InferenceEngine:
     """
     Manages model lifecycle (load, eval, predict) with a graceful fallback.
@@ -196,39 +225,30 @@ class InferenceEngine:
             if self._model is None:
                 raise ValueError("Model not loaded.")
                 
-            if self._model_type == "keras":
+            if self._model_type in ("keras", "tiny_cnn", "resnet"):
+                # Tiny CNN / Micro ResNet: 9 raw → L1 normalise → reshape (1,3,3,1)
                 if self._scaler is None:
-                    raise ValueError("Scaler not loaded for Keras model.")
-                import pandas as pd
-                fsr_cols = [
-                    'FSR Front Left',  'FSR Front Mid',  'FSR Front Right',
-                    'FSR Mid Left',    'FSR Mid Mid',    'FSR Mid Right',
-                    'FSR Back Left',   'FSR Back Mid',   'FSR Back Right',
-                ]
-                input_df = pd.DataFrame([raw_sensors.tolist()], columns=fsr_cols)
-                scaled   = self._scaler.transform(input_df)     # (1, 9) MinMax scaled
-                cnn_in   = scaled.reshape(1, 3, 3, 1)           # reshape for Conv2D
+                    raise ValueError("Scaler not loaded for Keras CNN/ResNet model.")
+                raw_2d   = np.array(raw_sensors, dtype=float).reshape(1, 9)
+                scaled   = self._scaler.transform(raw_2d)    # L1 Normalizer
+                cnn_in   = scaled.reshape(1, 3, 3, 1)
                 predictions = self._model.predict(cnn_in, verbose=0)[0]
+
+            elif self._model_type == "fnn":
+                # Hybrid FNN: 22 features (9 raw + 13 physics) → StandardScaler
+                if self._scaler is None:
+                    raise ValueError("Scaler not loaded for FNN model.")
+                raw_2d   = np.array(raw_sensors, dtype=float).reshape(1, 9)
+                feats    = _extract_22_features(raw_2d)       # (1, 22)
+                scaled   = self._scaler.transform(feats)
+                predictions = self._model.predict(scaled, verbose=0)[0]
+
             elif self._model_type == "random_forest":
-                # Feature Engineering đồng bộ với train_rf.py
-                raw_sensors = np.array(raw_sensors, dtype=np.float32)
-                row_sum = raw_sensors.sum()
-                if row_sum == 0: row_sum = 1
-                rel_sensors = raw_sensors / row_sum
-                
-                # Tính các vùng: [FL, FM, FR, ML, MM, MR, BL, BM, BR]
-                f_sum = rel_sensors[[0, 1, 2]].sum()
-                b_sum = rel_sensors[[6, 7, 8]].sum()
-                l_sum = rel_sensors[[0, 3, 6]].sum()
-                r_sum = rel_sensors[[2, 5, 8]].sum()
-                
-                fb_ratio = (f_sum - b_sum) / (f_sum + b_sum + 1e-5)
-                lr_ratio = (l_sum - r_sum) / (l_sum + r_sum + 1e-5)
-                
-                # Tổng hợp 11 features: 9 raw + 2 engineered
-                input_final = np.hstack([rel_sensors, [fb_ratio, lr_ratio]]).reshape(1, -1)
-                
+                # Random Forest: 22 features, no scaler needed
+                raw_2d      = np.array(raw_sensors, dtype=float).reshape(1, 9)
+                input_final = _extract_22_features(raw_2d)   # (1, 22)
                 predictions = self._model.predict_proba(input_final)[0]
+
             else:
                 raise ValueError(f"Unknown model type: {self._model_type}")
 
