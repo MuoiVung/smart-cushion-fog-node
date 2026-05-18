@@ -309,7 +309,7 @@ class InferenceEngine:
         model_ok  = self._model_path.exists()
         scaler_ok = True
         
-        if self._model_type == "keras":
+        if self._model_type in ("keras", "tiny_cnn", "resnet", "fnn"):
             scaler_ok = self._scaler_path and self._scaler_path.exists()
 
         if not model_ok or not scaler_ok:
@@ -325,7 +325,7 @@ class InferenceEngine:
             return
 
         try:
-            if self._model_type == "keras":
+            if self._model_type in ("keras", "tiny_cnn", "resnet", "fnn"):
                 import tensorflow as tf
                 self._model  = tf.keras.models.load_model(str(self._model_path), compile=False)
                 self._scaler = joblib.load(str(self._scaler_path))
@@ -335,13 +335,12 @@ class InferenceEngine:
                 if output_units == 1:
                     self._is_binary = True
                     logger.info(
-                        f"Keras binary CNN loaded from '{self._model_path}' "
-                        "(maps to NUP / LF for now — retrain with 11 classes for full support)"
+                        f"Keras binary model loaded from '{self._model_path}'"
                     )
                 else:
                     self._is_binary = False
                     logger.info(
-                        f"Keras {output_units}-class CNN loaded from '{self._model_path}'"
+                        f"Keras {output_units}-class model ({self._model_type}) loaded from '{self._model_path}'"
                     )
             elif self._model_type == "random_forest":
                 # Nạp mô hình Pickle
