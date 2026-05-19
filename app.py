@@ -89,7 +89,7 @@ class FogApplication:
         self._preprocessor = Preprocessor()   # no parameters needed anymore
 
         # Read model paths from DB (source of truth); fall back to .env on first run
-        _model_type  = self._local_db.get_config("model_type",  "keras") # We don't have settings.model_type yet, default to keras
+        _model_type  = self._local_db.get_config("model_type",  settings.model_type)
         _model_path  = paths.resolve_model_path(self._local_db.get_config("model_path",  settings.model_path))
         _scaler_path = paths.resolve_model_path(self._local_db.get_config("scaler_path", settings.scaler_path))
         self._inference = InferenceEngine(
