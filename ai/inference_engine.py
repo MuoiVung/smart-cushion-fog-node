@@ -50,17 +50,12 @@ logger = logging.getLogger(__name__)
 
 # ── Full ordered label list (model output index → PostureLabel) ────────────
 # Update this when a multi-class model is trained:
-# ── 9-posture model (excludes empty and object) ──────────────────────────
-POSTURE_LABELS_9: list[PostureLabel] = [
-    PostureLabel.NUP,     # 0
-    PostureLabel.LF,      # 1
-    PostureLabel.LB,      # 2
-    PostureLabel.LFSR,    # 3
-    PostureLabel.LFSL,    # 4
-    PostureLabel.CRL,     # 5
-    PostureLabel.CLL,     # 6
-    PostureLabel.CRLL,    # 7
-    PostureLabel.CLLL,    # 8
+POSTURE_LABELS_5: list[PostureLabel] = [
+    PostureLabel.UPRIGHT,  # 0
+    PostureLabel.FORWARD,  # 1
+    PostureLabel.BACKWARD, # 2
+    PostureLabel.RIGHT,    # 3
+    PostureLabel.LEFT,     # 4
 ]
 
 # Full 11-label list (for legacy/future support)
@@ -79,10 +74,10 @@ POSTURE_LABELS_11: list[PostureLabel] = [
 ]
 
 # ── Current binary model output mapping ───────────────────────────────────
-# score ≥ 0.5 → "Sitting Straight" → NUP
-# score < 0.5 → "Incorrect/Leaning" → LF (generic bad posture)
-_BINARY_POS_LABEL = PostureLabel.NUP   # score ≥ 0.5
-_BINARY_NEG_LABEL = PostureLabel.LF    # score < 0.5
+# score ≥ 0.5 → "Sitting Upright" → UPRIGHT
+# score < 0.5 → "Incorrect/Leaning" → FORWARD (generic bad posture)
+_BINARY_POS_LABEL = PostureLabel.UPRIGHT   # score ≥ 0.5
+_BINARY_NEG_LABEL = PostureLabel.FORWARD   # score < 0.5
 
 # FSR total-pressure thresholds for the rule-based regime
 _EMPTY_THRESHOLD  = 1000    # below this → empty (sum of all 9 ADC values)
@@ -286,8 +281,8 @@ class InferenceEngine:
                 
                 # Use appropriate label list based on output count
                 # If exactly 11 classes, use 11-label list (includes Empty/Object)
-                # Otherwise assume it's a 9-posture model (or a partial subset of it)
-                labels = POSTURE_LABELS_11 if len(predictions) == 11 else POSTURE_LABELS_9
+                # Otherwise assume it's a 5-posture model
+                labels = POSTURE_LABELS_11 if len(predictions) == 11 else POSTURE_LABELS_5
                 label = labels[predicted_idx]
 
                 # Get top 3

@@ -44,27 +44,19 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 # 0.  POSTURE CONFIG
 # ═══════════════════════════════════════════════════════════
 POSTURE_INFO = {
-    0: {"label": "NUP",  "name": "Neutral Upright Posture"},
-    1: {"label": "LF",   "name": "Leaning Forward"},
-    2: {"label": "LB",   "name": "Leaning Backward"},
-    3: {"label": "LFSR", "name": "Lean Forward + Support Right"},
-    4: {"label": "LFSL", "name": "Lean Forward + Support Left"},
-    5: {"label": "CRL",  "name": "Cross Right Leg (Ankle on Knee)"},
-    6: {"label": "CLL",  "name": "Cross Left Leg (Ankle on Knee)"},
-    7: {"label": "CRLL", "name": "Cross Right Leg (Thigh on Thigh)"},
-    8: {"label": "CLLL", "name": "Cross Left Leg (Thigh on Thigh)"},
+    0: {"label": "UPRIGHT",  "name": "Sitting Upright"},
+    1: {"label": "FORWARD",  "name": "Leaning Forward"},
+    2: {"label": "BACKWARD", "name": "Leaning Backward"},
+    3: {"label": "RIGHT",    "name": "Leaning Right"},
+    4: {"label": "LEFT",     "name": "Leaning Left"},
 }
 
 FILE_MAP = {
-    "straight": 0, "NUP": 0,
-    "leaning_forward": 1, "LF": 1,
-    "leaning_backward": 2, "LB": 2,
-    "support_right": 3, "LFSR": 3,
-    "support_left":  4, "LFSL": 4,
-    "cross_right_ankle": 5, "CRL":  5,
-    "cross_left_ankle":  6, "CLL":  6,
-    "cross_right_knee":  7, "CRLL": 7,
-    "cross_left_knee":   8, "CLLL": 8,
+    "upright": 0, "nup": 0, "straight": 0,
+    "forward": 1, "lf": 1, "leaning_forward": 1,
+    "backward": 2, "lb": 2, "leaning_backward": 2,
+    "right": 3, "lfsr": 3, "cll": 3, "clll": 3, "support_right": 3, "cross_left_ankle": 3, "cross_left_knee": 3,
+    "left": 4, "lfsl": 4, "crl": 4, "crll": 4, "support_left": 4, "cross_right_ankle": 4, "cross_right_knee": 4,
 }
 
 FSR_COLS = [
@@ -154,7 +146,7 @@ def build_tiny_cnn() -> tf.keras.Model:
     x   = layers.GlobalAveragePooling2D(name="gap")(x)
     x   = layers.Dense(16, activation="relu", name="hidden")(x)
     x   = layers.Dropout(0.2, name="dropout")(x)
-    out = layers.Dense(9, activation="softmax", name="posture")(x)
+    out = layers.Dense(5, activation="softmax", name="posture")(x)
 
     model = models.Model(inp, out, name="TinyCNN_Posture")
     model.compile(
