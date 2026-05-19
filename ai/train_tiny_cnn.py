@@ -90,11 +90,11 @@ def _noise_filter(df: pd.DataFrame) -> pd.DataFrame:
 
 def _subject_id(fp: str, folder_map: dict) -> int:
     """
-    Return a unique integer group-ID based on the FULL parent folder name.
-    Each distinct folder name (e.g. person_01, peter_01, huong_01) gets its
-    own ID so they are never merged into the same LOSO fold.
+    Return a unique integer group-ID based on the BASE subject name.
+    e.g. huong_01 and huong_02 are mapped to 'huong' to prevent subject leakage.
     """
-    parent = os.path.basename(os.path.dirname(fp))
+    raw_parent = os.path.basename(os.path.dirname(fp))
+    parent = re.sub(r'_\d+$', '', raw_parent)
     if parent not in folder_map:
         folder_map[parent] = len(folder_map)
     return folder_map[parent]
@@ -147,8 +147,11 @@ def load_dataset(data_folder: str) -> tuple:
 # ═══════════════════════════════════════════════════════════
 def build_tiny_cnn() -> tf.keras.Model:
     inp = layers.Input(shape=(3, 3, 1), name="fsr_grid")
-    x   = layers.Conv2D(8, (2, 2), padding="same", activation="relu", name="conv1")(inp)
-    x   = layers.Flatten(name="flat")(x)
+    # Increase filters to 16 and use 3x3 to capture more spatial info
+    x   = layers.Conv2D(16, (3, 3), padding="same", activation="relu", name="conv1")(inp)
+    x   = layers.BatchNormalization()(x)
+    # Use GlobalAveragePooling2D instead of Flatten to prevent spatial position overfitting
+    x   = layers.GlobalAveragePooling2D(name="gap")(x)
     x   = layers.Dense(16, activation="relu", name="hidden")(x)
     x   = layers.Dropout(0.2, name="dropout")(x)
     out = layers.Dense(9, activation="softmax", name="posture")(x)
@@ -175,14 +178,15 @@ def train(X: np.ndarray, y: np.ndarray, g: np.ndarray):
     best_model, best_scaler, best_acc = None, None, 0.0
     fold_accs = []
 
-    callbacks = [
-        EarlyStopping(monitor="val_loss", patience=30, restore_best_weights=True),
-        ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=10, verbose=0),
-    ]
-
     for fold, (tr, te) in enumerate(gkf.split(X, y, groups=g), 1):
         held_out = np.unique(g[te])
         print(f"\n── Fold {fold}  (test subject(s): {held_out}) ──")
+
+        # Instantiate callbacks INSIDE the loop to reset their state for each fold
+        callbacks = [
+            EarlyStopping(monitor="val_loss", patience=30, restore_best_weights=True),
+            ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=10, verbose=0),
+        ]
 
         # L1 Normalizer: each row sums to 1 → weight-invariant
         scaler = Normalizer(norm="l1")

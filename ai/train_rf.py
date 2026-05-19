@@ -116,11 +116,11 @@ def _noise_filter(df: pd.DataFrame, noise_thr: int = 20) -> pd.DataFrame:
 
 def _subject_id_from_path(file_path: str, folder_map: dict) -> int:
     """
-    Return a unique integer group-ID based on the FULL parent folder name.
-    Each distinct folder name (e.g. person_01, peter_01, huong_01) gets its
-    own ID so they are never merged into the same LOSO fold.
+    Return a unique integer group-ID based on the BASE subject name.
+    e.g. huong_01 and huong_02 are mapped to 'huong' to prevent subject leakage.
     """
-    parent = os.path.basename(os.path.dirname(file_path))
+    raw_parent = os.path.basename(os.path.dirname(file_path))
+    parent = re.sub(r'_\d+$', '', raw_parent)
     if parent not in folder_map:
         folder_map[parent] = len(folder_map)
     return folder_map[parent]
@@ -202,9 +202,9 @@ def train(X: np.ndarray, y: np.ndarray, g: np.ndarray):
         print(f"\n── Fold {fold}  (test subject(s): {held_out}) ──")
 
         clf = RandomForestClassifier(
-            n_estimators=100,    # 100 trees → stable vote, still <2 MB
-            max_depth=12,        # deep enough for 22-feat rules; prevents memorising 3 people
-            min_samples_split=4, # avoid singleton leaves that overfit
+            n_estimators=200,    # Increased trees for better ensemble stability
+            max_depth=14,        # Slightly deeper to capture complex feature relationships
+            min_samples_split=3, # Tighter splits
             class_weight="balanced",  # handles any slight class imbalance
             random_state=42,
             n_jobs=-1,
