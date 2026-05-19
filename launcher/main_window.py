@@ -1128,6 +1128,146 @@ class FogLauncherApp(ctk.CTk):
                 text_color=COLOR["blue"]
             )
 
+        # Auto-select model and scaler for the mode
+        self._auto_select_model_and_scaler_for_mode(mode)
+
+    def _auto_select_model_and_scaler_for_mode(self, mode: str) -> None:
+        KERAS_WITH_SCALER = {"fnn", "tiny_cnn", "resnet", "keras"}
+        
+        # 1. Try to load from DB
+        last_model = self._db.get_config(f"last_model_path_{mode}", "")
+        last_scaler = self._db.get_config(f"last_scaler_path_{mode}", "")
+        
+        # Resolve paths
+        resolved_model = paths.resolve_model_path(last_model) if last_model else ""
+        resolved_scaler = paths.resolve_model_path(last_scaler) if last_scaler else ""
+        
+        model_found = False
+        if resolved_model and Path(resolved_model).exists():
+            self._model_path_var.set(last_model)
+            model_found = True
+            if mode in KERAS_WITH_SCALER:
+                if resolved_scaler and Path(resolved_scaler).exists():
+                    self._scaler_path_var.set(last_scaler)
+                    self._model_match_label.configure(
+                        text=f"✅ Scaler loaded from history: {Path(last_scaler).name}",
+                        text_color=COLOR["green"]
+                    )
+                else:
+                    # Try to auto-guess the scaler based on the model path
+                    guessed = self._guess_paired_scaler(resolved_model)
+                    if guessed:
+                        # Convert to relative if possible
+                        try:
+                            rel_guessed = str(Path(guessed).relative_to(paths.DATA_ROOT))
+                        except ValueError:
+                            try:
+                                rel_guessed = str(Path(guessed).relative_to(paths.PROJECT_ROOT))
+                            except ValueError:
+                                rel_guessed = guessed
+                        self._scaler_path_var.set(rel_guessed)
+                        self._model_match_label.configure(
+                            text=f"✅ Scaler auto-matched: {Path(guessed).name}",
+                            text_color=COLOR["green"]
+                        )
+                    else:
+                        self._scaler_path_var.set("")
+                        self._model_match_label.configure(
+                            text="⚠️ No matching scaler found — please browse manually",
+                            text_color=COLOR["yellow"]
+                        )
+        
+        # 2. Fall back to v1 or defaults if not found in DB
+        if not model_found:
+            # Let's search in paths.get_models_dir()
+            models_dir = paths.get_models_dir()
+            fallback_model = ""
+            fallback_scaler = ""
+            
+            # Define keywords for mode search
+            mode_kw = {
+                "random_forest": "rf",
+                "tiny_cnn": "tiny_cnn",
+                "fnn": "fnn",
+                "resnet": "resnet",
+                "keras": "9_model"
+            }.get(mode, mode)
+            
+            # Look for any file containing mode_kw + 'v1' or 'v3' for keras
+            ext = ".pkl" if mode == "random_forest" else (".keras", ".h5")
+            
+            # Find all model files matching type
+            candidate_models = []
+            if models_dir.exists():
+                for item in models_dir.glob("*"):
+                    if item.is_file() and item.suffix.lower() in (ext if isinstance(ext, tuple) else (ext,)):
+                        name = item.name.lower()
+                        if mode_kw in name or (mode == "random_forest" and "random_forest" in name):
+                            candidate_models.append(item)
+            
+            # Find the best v1 model fallback
+            best_model_file = None
+            for p in candidate_models:
+                if "_v1" in p.name.lower() or (mode == "keras" and "mix_v3" in p.name.lower()):
+                    best_model_file = p
+                    break
+            
+            # Fall back to first matching candidate if no specific v1 found
+            if not best_model_file and candidate_models:
+                best_model_file = candidate_models[0]
+                
+            if best_model_file:
+                # Resolve to relative path
+                try:
+                    fallback_model = str(best_model_file.relative_to(paths.DATA_ROOT))
+                except ValueError:
+                    fallback_model = str(best_model_file)
+                    
+                self._model_path_var.set(fallback_model)
+                
+                if mode in KERAS_WITH_SCALER:
+                    # Guessed scaler
+                    guessed = self._guess_paired_scaler(str(best_model_file))
+                    if guessed:
+                        try:
+                            fallback_scaler = str(Path(guessed).relative_to(paths.DATA_ROOT))
+                        except ValueError:
+                            fallback_scaler = guessed
+                        self._scaler_path_var.set(fallback_scaler)
+                        self._model_match_label.configure(
+                            text=f"✅ Scaler auto-matched: {Path(guessed).name} (v1 fallback)",
+                            text_color=COLOR["green"]
+                        )
+                    else:
+                        self._scaler_path_var.set("")
+                        self._model_match_label.configure(
+                            text="⚠️ No matching scaler found for v1 fallback",
+                            text_color=COLOR["yellow"]
+                        )
+            else:
+                # Deep fallbacks if no files exist in directory
+                if mode == "random_forest":
+                    self._model_path_var.set("ai/models/posture_rf_v1.pkl")
+                elif mode == "tiny_cnn":
+                    self._model_path_var.set("ai/models/posture_tiny_cnn_v1.keras")
+                    self._scaler_path_var.set("ai/models/scaler_tiny_cnn_v1.pkl")
+                elif mode == "fnn":
+                    self._model_path_var.set("ai/models/posture_fnn_v1.keras")
+                    self._scaler_path_var.set("ai/models/scaler_fnn_v1.pkl")
+                elif mode == "resnet":
+                    self._model_path_var.set("ai/models/posture_resnet_v1.keras")
+                    self._scaler_path_var.set("ai/models/scaler_resnet_v1.pkl")
+                else:
+                    self._model_path_var.set("ai/models/posture_9_model.h5")
+                    self._scaler_path_var.set("ai/models/fsr_scaler_9.pkl")
+                
+                # Check if this fallback scaler is required
+                if mode in KERAS_WITH_SCALER:
+                    self._model_match_label.configure(
+                        text="⚠️ Using default fallback paths",
+                        text_color=COLOR["yellow"]
+                    )
+
     def _on_browse_model(self) -> None:
         mode = self._model_mode.get()
         is_pickle = (mode == "random_forest")
@@ -1149,6 +1289,27 @@ class FogLauncherApp(ctk.CTk):
             initialdir=str(paths.get_models_dir()),
         )
         if path:
+            # Validate selected model matches active mode
+            filename = Path(path).name.lower()
+            keyword_map = {
+                "random_forest": ["rf", "random_forest"],
+                "tiny_cnn": ["tiny_cnn"],
+                "fnn": ["fnn"],
+                "resnet": ["resnet"],
+                "keras": ["keras", "cnn", "9_model", "posture"]
+            }
+            keywords = keyword_map.get(mode, [mode])
+            
+            if not any(kw in filename for kw in keywords):
+                expected = " or ".join(f"'{kw}'" for kw in keywords)
+                messagebox.showwarning(
+                    "Invalid Model Selection",
+                    f"You are currently in '{mode_title}' mode.\n\n"
+                    f"The selected file:\n{Path(path).name}\n\n"
+                    f"does not seem to match this mode. Please select a file with {expected} in its name."
+                )
+                return
+
             self._model_path_var.set(path)
             # Auto-detect paired scaler
             matched = self._guess_paired_scaler(path)
@@ -1172,6 +1333,27 @@ class FogLauncherApp(ctk.CTk):
             initialdir=str(paths.get_models_dir()),
         )
         if path:
+            # Validate selected scaler matches active mode
+            mode = self._model_mode.get()
+            filename = Path(path).name.lower()
+            keyword_map = {
+                "tiny_cnn": ["tiny_cnn", "cnn"],
+                "fnn": ["fnn"],
+                "resnet": ["resnet"],
+                "keras": ["keras", "cnn", "fsr_scaler", "scaler"]
+            }
+            keywords = keyword_map.get(mode, [mode])
+            
+            if not any(kw in filename for kw in keywords):
+                expected = " or ".join(f"'{kw}'" for kw in keywords)
+                messagebox.showwarning(
+                    "Invalid Scaler Selection",
+                    f"You are currently in '{mode.upper()}' mode.\n\n"
+                    f"The selected scaler:\n{Path(path).name}\n\n"
+                    f"does not seem to match this mode. Please select a scaler with {expected} in its name."
+                )
+                return
+
             self._scaler_path_var.set(path)
             from pathlib import Path as _Path
             self._model_match_label.configure(
@@ -1292,6 +1474,12 @@ class FogLauncherApp(ctk.CTk):
         self._db.set_config("model_type",  mode)
         self._db.set_config("model_path",  model_path)
         self._db.set_config("scaler_path", scaler_path)
+        
+        # Also store type-specific configuration
+        self._db.set_config(f"last_model_path_{mode}", model_path)
+        if mode in SCALER_REQUIRED:
+            self._db.set_config(f"last_scaler_path_{mode}", scaler_path)
+            
         self._log_console(f"Config saved → [{mode}] {model_path}")
 
         # Hot-reload if MQTT is live (no Docker restart needed!)
