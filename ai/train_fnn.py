@@ -104,9 +104,16 @@ def _noise_filter(df: pd.DataFrame) -> pd.DataFrame:
     return df[(tp >= m * 0.75) & (tp <= m * 1.25)]
 
 
-def _subject_id(fp: str, fallback: int) -> int:
-    m = re.search(r"(\d+)", os.path.basename(os.path.dirname(fp)))
-    return int(m.group(1)) if m else fallback
+def _subject_id(fp: str, folder_map: dict) -> int:
+    """
+    Return a unique integer group-ID based on the FULL parent folder name.
+    Each distinct folder name (e.g. person_01, peter_01, huong_01) gets its
+    own ID so they are never merged into the same LOSO fold.
+    """
+    parent = os.path.basename(os.path.dirname(fp))
+    if parent not in folder_map:
+        folder_map[parent] = len(folder_map)
+    return folder_map[parent]
 
 
 def load_dataset(data_folder: str) -> tuple:
@@ -117,8 +124,9 @@ def load_dataset(data_folder: str) -> tuple:
     ))
     sorted_keys = sorted(FILE_MAP, key=len, reverse=True)
     X_list, y_list, g_list = [], [], []
+    folder_map: dict = {}   # folder_name → unique int group-ID
 
-    for fi, fp in enumerate(all_files):
+    for _, fp in enumerate(all_files):
         fname = os.path.basename(fp).lower()
         if fname.startswith("~$"):
             continue
@@ -139,7 +147,7 @@ def load_dataset(data_folder: str) -> tuple:
         raw = df[FSR_COLS].values
         X_list.append(extract_features(raw))
         y_list.append(np.full(len(raw), target, dtype=int))
-        g_list.append(np.full(len(raw), _subject_id(fp, fi), dtype=int))
+        g_list.append(np.full(len(raw), _subject_id(fp, folder_map), dtype=int))
         print(f"  + [{os.path.basename(os.path.dirname(fp))}] {len(raw):>4} frames  class={target}")
 
     if not X_list:

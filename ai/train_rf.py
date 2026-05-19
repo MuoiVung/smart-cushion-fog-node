@@ -113,15 +113,16 @@ def _noise_filter(df: pd.DataFrame, noise_thr: int = 20) -> pd.DataFrame:
     return df[(tp >= m * 0.75) & (tp <= m * 1.25)]
 
 
-def _subject_id_from_path(file_path: str, fallback: int) -> int:
+def _subject_id_from_path(file_path: str, folder_map: dict) -> int:
     """
-    Extract an integer group-ID from the parent folder name.
-    Handles any pattern: person_01, person_02 … person_99.
-    Falls back to `fallback` when the folder doesn't match.
+    Return a unique integer group-ID based on the FULL parent folder name.
+    Each distinct folder name (e.g. person_01, peter_01, huong_01) gets its
+    own ID so they are never merged into the same LOSO fold.
     """
     parent = os.path.basename(os.path.dirname(file_path))
-    m = re.search(r"(\d+)", parent)
-    return int(m.group(1)) if m else fallback
+    if parent not in folder_map:
+        folder_map[parent] = len(folder_map)
+    return folder_map[parent]
 
 
 def load_dataset(data_folder: str = "./data_exports") -> tuple:
@@ -136,8 +137,9 @@ def load_dataset(data_folder: str = "./data_exports") -> tuple:
 
     X_list, y_list, g_list = [], [], []
     sorted_keys = sorted(FILE_MAP, key=len, reverse=True)
+    folder_map: dict = {}   # folder_name → unique int group-ID
 
-    for fallback_id, fp in enumerate(all_files):
+    for _, fp in enumerate(all_files):
         fname = os.path.basename(fp).lower()
         if fname.startswith("~$"):       # skip Excel lock files
             continue
@@ -162,7 +164,7 @@ def load_dataset(data_folder: str = "./data_exports") -> tuple:
         raw = df[FSR_COLS].values
         X_list.append(extract_features(raw))
         y_list.append(np.full(len(raw), target, dtype=int))
-        g_list.append(np.full(len(raw), _subject_id_from_path(fp, fallback_id), dtype=int))
+        g_list.append(np.full(len(raw), _subject_id_from_path(fp, folder_map), dtype=int))
 
         parent = os.path.basename(os.path.dirname(fp))
         print(f"  + [{parent}] {len(raw):>4} frames  class={target}  {os.path.basename(fp)}")
