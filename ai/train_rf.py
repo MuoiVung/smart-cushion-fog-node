@@ -182,10 +182,18 @@ def load_dataset(data_folder: str = "./data_exports") -> tuple:
 # ═══════════════════════════════════════════════════════════
 def train(X: np.ndarray, y: np.ndarray, g: np.ndarray):
     n_subjects = len(np.unique(g))
-    gkf = GroupKFold(n_splits=n_subjects)
+    if n_subjects < 2:
+        from sklearn.model_selection import StratifiedKFold
+        gkf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        print(f"\n  [RF] Only {n_subjects} subject found. Falling back to 5-Fold StratifiedKFold CV.")
+    else:
+        gkf = GroupKFold(n_splits=n_subjects)
 
     print(f"\n{'='*55}")
-    print(f"  [RF] {n_subjects}-FOLD LEAVE-ONE-SUBJECT-OUT CV")
+    if n_subjects < 2:
+        print(f"  [RF] 5-FOLD STRATIFIED K-FOLD CV")
+    else:
+        print(f"  [RF] {n_subjects}-FOLD LEAVE-ONE-SUBJECT-OUT CV")
     print(f"{'='*55}")
 
     fold_accs = []

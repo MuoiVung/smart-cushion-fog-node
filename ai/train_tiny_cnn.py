@@ -163,9 +163,19 @@ def build_tiny_cnn() -> tf.keras.Model:
 # ═══════════════════════════════════════════════════════════
 def train(X: np.ndarray, y: np.ndarray, g: np.ndarray):
     n_subj = len(np.unique(g))
-    gkf    = GroupKFold(n_splits=n_subj)
+    if n_subj < 2:
+        from sklearn.model_selection import StratifiedKFold
+        gkf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        print(f"\n  [CNN] Only {n_subj} subject found. Falling back to 5-Fold StratifiedKFold CV.")
+    else:
+        gkf = GroupKFold(n_splits=n_subj)
 
-    print(f"\n{'='*55}\n  [CNN] {n_subj}-FOLD LEAVE-ONE-SUBJECT-OUT CV\n{'='*55}")
+    print(f"\n{'='*55}")
+    if n_subj < 2:
+        print(f"  [CNN] 5-FOLD STRATIFIED K-FOLD CV")
+    else:
+        print(f"  [CNN] {n_subj}-FOLD LEAVE-ONE-SUBJECT-OUT CV")
+    print(f"{'='*55}")
 
     best_model, best_scaler, best_acc = None, None, 0.0
     fold_accs = []
