@@ -231,7 +231,7 @@ class FogApplication:
                     session_id=self._session_id,
                     fog_timestamp_iso=datetime.now(timezone.utc).isoformat(),
                     occupancy_state=OccupancyState.OCCUPIED,
-                    posture=PostureLabel.NUP,
+                    posture=self._last_stable_posture,
                     alert_active=self._alert_active,
                 )
                 await self._cloud_sync.publish_telemetry(telemetry)

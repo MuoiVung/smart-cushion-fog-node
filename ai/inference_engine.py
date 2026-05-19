@@ -58,19 +58,19 @@ POSTURE_LABELS_5: list[PostureLabel] = [
     PostureLabel.LEFT,     # 4
 ]
 
-# Full 11-label list (for legacy/future support)
+# Full 11-label list (for legacy/future support, mapped to 5 macro-labels)
 POSTURE_LABELS_11: list[PostureLabel] = [
     PostureLabel.EMPTY,
     PostureLabel.OBJECT,
-    PostureLabel.NUP,
-    PostureLabel.LF,
-    PostureLabel.LB,
-    PostureLabel.LFSR,
-    PostureLabel.LFSL,
-    PostureLabel.CRL,
-    PostureLabel.CLL,
-    PostureLabel.CRLL,
-    PostureLabel.CLLL,
+    PostureLabel.UPRIGHT,
+    PostureLabel.FORWARD,
+    PostureLabel.BACKWARD,
+    PostureLabel.RIGHT,
+    PostureLabel.LEFT,
+    PostureLabel.LEFT,
+    PostureLabel.RIGHT,
+    PostureLabel.LEFT,
+    PostureLabel.RIGHT,
 ]
 
 # ── Current binary model output mapping ───────────────────────────────────

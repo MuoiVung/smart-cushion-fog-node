@@ -255,15 +255,11 @@ class CloudTelemetryRecord(BaseModel):
 
 class PostureDurationBreakdown(BaseModel):
     """Per-posture accumulated duration in seconds for a session summary."""
-    nup_duration_sec:  int = 0
-    lf_duration_sec:   int = 0
-    lb_duration_sec:   int = 0
-    lfsr_duration_sec: int = 0
-    lfsl_duration_sec: int = 0
-    crl_duration_sec:  int = 0
-    cll_duration_sec:  int = 0
-    crll_duration_sec: int = 0
-    clll_duration_sec: int = 0
+    upright_duration_sec:  int = 0
+    forward_duration_sec:  int = 0
+    backward_duration_sec: int = 0
+    right_duration_sec:    int = 0
+    left_duration_sec:     int = 0
 
 
 class CloudSummaryRecord(BaseModel):
