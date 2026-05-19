@@ -73,6 +73,19 @@ POSTURE_LABELS_11: list[PostureLabel] = [
     PostureLabel.RIGHT,
 ]
 
+# Full 9-label list (for legacy 9-posture models, mapped to 5 macro-labels)
+POSTURE_LABELS_9: list[PostureLabel] = [
+    PostureLabel.UPRIGHT,
+    PostureLabel.FORWARD,
+    PostureLabel.BACKWARD,
+    PostureLabel.RIGHT,
+    PostureLabel.LEFT,
+    PostureLabel.LEFT,
+    PostureLabel.RIGHT,
+    PostureLabel.LEFT,
+    PostureLabel.RIGHT,
+]
+
 # ── Current binary model output mapping ───────────────────────────────────
 # score ≥ 0.5 → "Sitting Upright" → UPRIGHT
 # score < 0.5 → "Incorrect/Leaning" → FORWARD (generic bad posture)
@@ -280,19 +293,38 @@ class InferenceEngine:
                 confidence    = float(predictions[predicted_idx])
                 
                 # Use appropriate label list based on output count
-                # If exactly 11 classes, use 11-label list (includes Empty/Object)
-                # Otherwise assume it's a 5-posture model
-                labels = POSTURE_LABELS_11 if len(predictions) == 11 else POSTURE_LABELS_5
-                label = labels[predicted_idx]
+                if len(predictions) == 11:
+                    labels = POSTURE_LABELS_11
+                elif len(predictions) == 9:
+                    labels = POSTURE_LABELS_9
+                elif len(predictions) == 5:
+                    labels = POSTURE_LABELS_5
+                else:
+                    logger.warning(f"Unexpected prediction count: {len(predictions)}. Defaulting to 5-label mapping.")
+                    labels = POSTURE_LABELS_5
 
-                # Get top 3
+                # Safe indexing for main label
+                if predicted_idx < len(labels):
+                    label = labels[predicted_idx]
+                else:
+                    logger.error(f"Predicted index {predicted_idx} is out of bounds for labels array (size {len(labels)})")
+                    label = PostureLabel.UNKNOWN
+
+                # Get top 3 with safety checks
                 top_indices = np.argsort(predictions)[-3:][::-1]
                 top_3 = []
                 for idx in top_indices:
-                    top_3.append({
-                        "label": labels[int(idx)].value,
-                        "confidence": float(round(predictions[idx], 4))
-                    })
+                    idx_int = int(idx)
+                    if idx_int < len(labels):
+                        top_3.append({
+                            "label": labels[idx_int].value,
+                            "confidence": float(round(predictions[idx_int], 4))
+                        })
+                    else:
+                        top_3.append({
+                            "label": PostureLabel.UNKNOWN.value,
+                            "confidence": float(round(predictions[idx_int], 4))
+                        })
                 
                 logger.debug(f"AI multi-class prediction: {label.value} (idx={predicted_idx}, conf={confidence:.3f})")
 
