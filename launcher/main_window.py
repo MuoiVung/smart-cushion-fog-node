@@ -405,13 +405,7 @@ class FogLauncherApp(ctk.CTk):
             initial_mode = "random_forest"
         self._model_mode = ctk.StringVar(value=initial_mode)
 
-        ctk.CTkRadioButton(
-            frame, text="Keras Model (.h5)",
-            variable=self._model_mode, value="keras",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            command=self._on_model_mode_change,
-        ).grid(row=1, column=0, padx=16, pady=4, sticky="w")
-        
+        # Row 1: Random Forest | Hybrid FNN
         ctk.CTkRadioButton(
             frame, text="Random Forest (.pkl)",
             variable=self._model_mode, value="random_forest",
@@ -426,6 +420,7 @@ class FogLauncherApp(ctk.CTk):
             command=self._on_model_mode_change,
         ).grid(row=1, column=1, padx=8, pady=4, sticky="w")
 
+        # Row 2: Tiny CNN | Micro ResNet | Keras Legacy
         ctk.CTkRadioButton(
             frame, text="Tiny CNN (.keras)",
             variable=self._model_mode, value="tiny_cnn",
@@ -441,18 +436,18 @@ class FogLauncherApp(ctk.CTk):
         ).grid(row=2, column=1, padx=8, pady=4, sticky="w")
 
         ctk.CTkRadioButton(
-            frame, text="Keras Legacy (.h5)",
+            frame, text="CNN Legacy (.h5)",
             variable=self._model_mode, value="keras",
             font=ctk.CTkFont(size=12),
             command=self._on_model_mode_change,
         ).grid(row=2, column=2, padx=8, pady=4, sticky="w")
 
-        # ── Row 2: Model file ───────────────────────────────────────
+        # ── Row 3: Model file ───────────────────────────────────────────────
         self._model_lbl = ctk.CTkLabel(
             frame, text="Model File:",
             font=ctk.CTkFont(size=11), text_color=COLOR["muted"],
         )
-        self._model_lbl.grid(row=2, column=0, padx=16, pady=4, sticky="e")
+        self._model_lbl.grid(row=3, column=0, padx=16, pady=4, sticky="e")
 
         self._model_path_var = ctk.StringVar(
             value=self._db.get_config("model_path", _read_env("MODEL_PATH", "ai/models/posture_9_model.h5"))
@@ -465,7 +460,7 @@ class FogLauncherApp(ctk.CTk):
             corner_radius=6,
             height=32,
         )
-        self._model_entry.grid(row=2, column=1, columnspan=2, padx=8, pady=4, sticky="ew")
+        self._model_entry.grid(row=3, column=1, columnspan=2, padx=8, pady=4, sticky="ew")
 
         self._browse_btn = ctk.CTkButton(
             frame, text="Browse…", width=80, height=32,
@@ -474,14 +469,14 @@ class FogLauncherApp(ctk.CTk):
             hover_color="#1a2537", state="disabled",
             command=self._on_browse_model,
         )
-        self._browse_btn.grid(row=2, column=3, padx=(0, 8), pady=4)
+        self._browse_btn.grid(row=3, column=3, padx=(0, 8), pady=4)
 
-        # ── Row 3: Scaler file (.pkl) ─────────────────────────────────────
+        # ── Row 4: Scaler file (.pkl) ───────────────────────────────────────
         self._scaler_lbl = ctk.CTkLabel(
             frame, text="Scaler (.pkl):",
             font=ctk.CTkFont(size=11), text_color=COLOR["muted"],
         )
-        self._scaler_lbl.grid(row=3, column=0, padx=16, pady=4, sticky="e")
+        self._scaler_lbl.grid(row=4, column=0, padx=16, pady=4, sticky="e")
 
         self._scaler_path_var = ctk.StringVar(
             value=self._db.get_config("scaler_path", _read_env("SCALER_PATH", "ai/models/fsr_scaler_9.pkl"))
@@ -494,7 +489,7 @@ class FogLauncherApp(ctk.CTk):
             corner_radius=6,
             height=32,
         )
-        self._scaler_entry.grid(row=3, column=1, columnspan=2, padx=8, pady=4, sticky="ew")
+        self._scaler_entry.grid(row=4, column=1, columnspan=2, padx=8, pady=4, sticky="ew")
 
         self._scaler_browse_btn = ctk.CTkButton(
             frame, text="Browse…", width=80, height=32,
@@ -503,17 +498,17 @@ class FogLauncherApp(ctk.CTk):
             hover_color="#1a2537", state="disabled",
             command=self._on_browse_scaler,
         )
-        self._scaler_browse_btn.grid(row=3, column=3, padx=(0, 8), pady=4)
+        self._scaler_browse_btn.grid(row=4, column=3, padx=(0, 8), pady=4)
 
-        # ── Row 4: Match status label ─────────────────────────────────────
+        # ── Row 5: Match status label ───────────────────────────────────────
         self._model_match_label = ctk.CTkLabel(
             frame, text="",
             font=ctk.CTkFont(size=11),
             text_color=COLOR["green"],
         )
-        self._model_match_label.grid(row=4, column=0, columnspan=4, padx=16, pady=(0, 2), sticky="w")
+        self._model_match_label.grid(row=5, column=0, columnspan=4, padx=16, pady=(0, 2), sticky="w")
 
-        # ── Row 5: Apply / Hot-Reload button ─────────────────────────────
+        # ── Row 6: Apply / Hot-Reload button ───────────────────────────────
         self._apply_btn = ctk.CTkButton(
             frame, text="Apply & Restart Fog Node",
             font=ctk.CTkFont(size=12, weight="bold"),
@@ -524,7 +519,7 @@ class FogLauncherApp(ctk.CTk):
             height=32,
             command=self._on_apply_model,
         )
-        self._apply_btn.grid(row=5, column=0, columnspan=4, padx=16, pady=(4, 14), sticky="w")
+        self._apply_btn.grid(row=6, column=0, columnspan=4, padx=16, pady=(4, 14), sticky="w")
 
         # Sync UI state with default mode
         self._on_model_mode_change()
@@ -1086,27 +1081,40 @@ class FogLauncherApp(ctk.CTk):
 
     def _on_model_mode_change(self) -> None:
         mode = self._model_mode.get()
-        if mode == "keras":
-            self._model_lbl.configure(text="Model (.h5):")
+
+        # Models that require a .keras file + a .pkl scaler
+        KERAS_WITH_SCALER = {"fnn", "tiny_cnn", "resnet", "keras"}
+        # Models that use only a .pkl file, no separate scaler
+        PKL_NO_SCALER = {"random_forest"}
+
+        if mode in KERAS_WITH_SCALER:
+            label_text = {
+                "keras":    "Model CNN Legacy (.h5):",
+                "fnn":      "Model FNN (.keras):",
+                "tiny_cnn": "Model Tiny CNN (.keras):",
+                "resnet":   "Model ResNet (.keras):",
+            }.get(mode, "Model (.keras):")
+            self._model_lbl.configure(text=label_text)
             self._model_entry.configure(state="normal")
             self._browse_btn.configure(state="normal")
-            
+
             # Show scaler elements
             if hasattr(self, "_scaler_lbl"):
-                self._scaler_lbl.grid(row=3, column=0, padx=16, pady=4, sticky="e")
+                self._scaler_lbl.grid(row=4, column=0, padx=16, pady=4, sticky="e")
             if hasattr(self, "_scaler_entry"):
-                self._scaler_entry.grid(row=3, column=1, columnspan=2, padx=8, pady=4, sticky="ew")
+                self._scaler_entry.grid(row=4, column=1, columnspan=2, padx=8, pady=4, sticky="ew")
                 self._scaler_entry.configure(state="normal")
             if hasattr(self, "_scaler_browse_btn"):
-                self._scaler_browse_btn.grid(row=3, column=3, padx=(0, 8), pady=4)
+                self._scaler_browse_btn.grid(row=4, column=3, padx=(0, 8), pady=4)
                 self._scaler_browse_btn.configure(state="normal")
-                
+
             self._model_match_label.configure(text="")
-        elif mode == "random_forest":
+
+        elif mode in PKL_NO_SCALER:
             self._model_lbl.configure(text="Model (.pkl):")
             self._model_entry.configure(state="normal")
             self._browse_btn.configure(state="normal")
-            
+
             # Hide scaler elements
             if hasattr(self, "_scaler_lbl"):
                 self._scaler_lbl.grid_forget()
@@ -1114,30 +1122,26 @@ class FogLauncherApp(ctk.CTk):
                 self._scaler_entry.grid_forget()
             if hasattr(self, "_scaler_browse_btn"):
                 self._scaler_browse_btn.grid_forget()
-                
+
             self._model_match_label.configure(
-                text=f"ℹ️ {mode.replace('_', ' ').title()} does not require a Scaler file.", 
+                text=f"ℹ️ Random Forest does not require a Scaler file.",
                 text_color=COLOR["blue"]
             )
-        else:
-            self._model_entry.configure(state="disabled")
-            self._browse_btn.configure(state="disabled")
-            
-            # Hide scaler elements
-            if hasattr(self, "_scaler_lbl"):
-                self._scaler_lbl.grid_forget()
-            if hasattr(self, "_scaler_entry"):
-                self._scaler_entry.grid_forget()
-            if hasattr(self, "_scaler_browse_btn"):
-                self._scaler_browse_btn.grid_forget()
-                
-            self._model_match_label.configure(text="")
 
     def _on_browse_model(self) -> None:
         mode = self._model_mode.get()
         is_pickle = (mode == "random_forest")
-        ftypes = [("Pickle Model", "*.pkl"), ("All Files", "*")] if is_pickle else [("Keras Model", "*.h5 *.keras"), ("All Files", "*")]
-        title = f"Select {mode.replace('_', ' ').title()} Model (.pkl)" if is_pickle else "Select Keras Model (.h5)"
+        ftypes = [("Pickle Model", "*.pkl"), ("All Files", "*")] if is_pickle else [("Model File", "*.h5 *.keras"), ("All Files", "*")]
+        
+        mode_title = {
+            "keras": "CNN Legacy (.h5)",
+            "fnn": "Hybrid FNN (.keras)",
+            "tiny_cnn": "Tiny CNN (.keras)",
+            "resnet": "Micro ResNet (.keras)",
+            "random_forest": "Random Forest (.pkl)"
+        }.get(mode, mode.replace('_', ' ').title())
+        
+        title = f"Select {mode_title}"
         
         path = filedialog.askopenfilename(
             title=title,
@@ -1177,13 +1181,7 @@ class FogLauncherApp(ctk.CTk):
 
     def _guess_paired_scaler(self, h5_path: str) -> Optional[str]:
         """
-        Try to auto-detect the matching .pkl scaler for a selected .h5 model.
-
-        Strategy:
-          1. If only one .pkl exists in the same folder → use it.
-          2. Extract the variant suffix from the .h5 stem (e.g. "_mix", "_anhPhuong")
-             and look for a .pkl containing that suffix.
-          3. If still ambiguous → return None (user must pick manually).
+        Try to auto-detect the matching .pkl scaler for a selected model.
         """
         h5 = Path(h5_path)
         model_dir = h5.parent
@@ -1194,12 +1192,45 @@ class FogLauncherApp(ctk.CTk):
         if len(pkl_files) == 1:
             return str(pkl_files[0])
 
-        # Extract variant: "posture_9_model_mix" → variant = "mix"
-        stem    = h5.stem
+        stem = h5.stem.lower()
+
+        # 1. Match by version suffix (e.g. "_v1", "_v2", etc.)
+        import re
+        version_match = re.search(r'_v(\d+)', stem)
+        if version_match:
+            version_str = version_match.group(0)  # e.g. "_v1"
+            
+            # Extract type keywords
+            model_type = None
+            for t in ["tiny_cnn", "resnet", "fnn", "cnn"]:
+                if t in stem:
+                    model_type = t
+                    break
+            
+            # Find candidate pkls containing the same version string
+            candidates = [p for p in pkl_files if version_str in p.name.lower()]
+            if len(candidates) == 1:
+                return str(candidates[0])
+            elif len(candidates) > 1 and model_type:
+                # Filter candidates by type keyword
+                type_keywords = [model_type]
+                if model_type == "tiny_cnn":
+                    type_keywords.append("cnn") # for backward compatibility
+                
+                type_matched = [p for p in candidates if any(kw in p.name.lower() for kw in type_keywords)]
+                if len(type_matched) == 1:
+                    return str(type_matched[0])
+                elif len(type_matched) > 1:
+                    best_match = [p for p in type_matched if model_type in p.name.lower()]
+                    if best_match:
+                        return str(best_match[0])
+                    return str(type_matched[0])
+
+        # 2. Match by variant marker suffix (legacy fallback)
         variant = None
         for marker in ["_model_", "_model"]:
             if marker in stem:
-                variant = stem.split(marker, 1)[1]  # e.g. "mix" or "anhPhuong"
+                variant = stem.split(marker, 1)[1]
                 break
 
         if variant:
@@ -1207,74 +1238,74 @@ class FogLauncherApp(ctk.CTk):
                 if variant.lower() in pkl.stem.lower():
                     return str(pkl)
 
-        return None  # Ambiguous — let user choose manually
+        return None
 
     def _on_apply_model(self) -> None:
         mode = self._model_mode.get()
-        if mode in ["keras", "random_forest"]:
-            model_path  = self._model_path_var.get().strip()
-            scaler_path = self._scaler_path_var.get().strip() if mode == "keras" else "none"
+        ALL_MODES = {"keras", "random_forest", "fnn", "tiny_cnn", "resnet"}
+        SCALER_REQUIRED = {"keras", "fnn", "tiny_cnn", "resnet"}
 
-            # Validate model file using dynamic resolution
-            resolved_model = paths.resolve_model_path(model_path)
-            if not Path(resolved_model).exists():
-                messagebox.showwarning(
-                    "Model Not Found",
-                    f"Model file not found:\n{model_path}\n\nPlease browse for a valid model file.",
-                )
-                return
+        if mode not in ALL_MODES:
+            return
 
-            # Validate scaler file using dynamic resolution
-            resolved_scaler = paths.resolve_model_path(scaler_path) if scaler_path != "none" else ""
-            if mode == "keras" and not Path(resolved_scaler).exists():
-                messagebox.showwarning(
-                    "Scaler Not Found",
-                    f"Scaler file not found:\n{scaler_path}\n\nPlease browse for the matching .pkl file.",
-                )
-                return
+        model_path  = self._model_path_var.get().strip()
+        scaler_path = self._scaler_path_var.get().strip() if mode in SCALER_REQUIRED else "none"
 
-            # Convert to relative paths if within persistent or project root for compatibility
+        # Validate model file using dynamic resolution
+        resolved_model = paths.resolve_model_path(model_path)
+        if not Path(resolved_model).exists():
+            messagebox.showwarning(
+                "Model Not Found",
+                f"Model file not found:\n{model_path}\n\nPlease browse for a valid model file.",
+            )
+            return
+
+        # Validate scaler file
+        resolved_scaler = paths.resolve_model_path(scaler_path) if scaler_path != "none" else ""
+        if mode in SCALER_REQUIRED and not Path(resolved_scaler).exists():
+            messagebox.showwarning(
+                "Scaler Not Found",
+                f"Scaler file not found:\n{scaler_path}\n\nPlease browse for the matching .pkl file.",
+            )
+            return
+
+        # Convert to relative paths for portability
+        try:
+            model_path = str(Path(model_path).relative_to(paths.DATA_ROOT))
+        except ValueError:
             try:
-                rel_model = Path(model_path).relative_to(paths.DATA_ROOT)
-                model_path = str(rel_model)
+                model_path = str(Path(model_path).relative_to(PROJECT_ROOT))
             except ValueError:
-                try:
-                    rel_model = Path(model_path).relative_to(PROJECT_ROOT)
-                    model_path = str(rel_model)
-                except ValueError:
-                    pass # Keep absolute
-                
+                pass
+
+        try:
+            if scaler_path != "none":
+                scaler_path = str(Path(scaler_path).relative_to(paths.DATA_ROOT))
+        except ValueError:
             try:
                 if scaler_path != "none":
-                    rel_scaler = Path(scaler_path).relative_to(paths.DATA_ROOT)
-                    scaler_path = str(rel_scaler)
+                    scaler_path = str(Path(scaler_path).relative_to(PROJECT_ROOT))
             except ValueError:
-                try:
-                    if scaler_path != "none":
-                        rel_scaler = Path(scaler_path).relative_to(PROJECT_ROOT)
-                        scaler_path = str(rel_scaler)
-                except ValueError:
-                    pass # Keep absolute
+                pass
 
-            # Persist to DB (sole source of truth for model paths)
-            self._db.set_config("model_type",  mode)
-            self._db.set_config("model_path",  model_path)
-            self._db.set_config("scaler_path", scaler_path)
-            self._log_console(f"Config saved (relative) → [{mode}] {model_path}")
+        # Persist to DB (sole source of truth for model paths)
+        self._db.set_config("model_type",  mode)
+        self._db.set_config("model_path",  model_path)
+        self._db.set_config("scaler_path", scaler_path)
+        self._log_console(f"Config saved → [{mode}] {model_path}")
 
+        # Hot-reload if MQTT is live (no Docker restart needed!)
+        if self._mqtt_connected:
+            ok = self._mqtt_monitor.publish_model_reload(mode, model_path, scaler_path)
+            if ok:
+                self._log_console("🔥 Hot-reload sent — model will swap in ~2s without restart")
+                self._apply_btn.configure(text="🔥 Sent! (no restart needed)")
+                self.after(3000, lambda: self._apply_btn.configure(text="Apply & Restart Fog Node"))
+                return
 
-            # Hot-reload if MQTT is live (no Docker restart needed!)
-            if self._mqtt_connected:
-                ok = self._mqtt_monitor.publish_model_reload(mode, model_path, scaler_path)
-                if ok:
-                    self._log_console("🔥 Hot-reload sent — model will swap in ~2s without restart")
-                    self._apply_btn.configure(text="🔥 Sent! (no restart needed)")
-                    self.after(3000, lambda: self._apply_btn.configure(text="Apply & Restart Fog Node"))
-                    return
-
-            # Fallback: MQTT not connected → restart fog node
-            self._log_console("⚙️ MQTT offline — restarting Fog Node to apply model…")
-            self._docker.restart_fog_node()
+        # Fallback: MQTT not connected → restart fog node
+        self._log_console("⚙️ MQTT offline — restarting Fog Node to apply model…")
+        self._docker.restart_fog_node()
 
 
     def _on_channel_menu_change(self, selected_label: str) -> None:

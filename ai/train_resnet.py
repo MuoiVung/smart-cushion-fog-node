@@ -204,7 +204,7 @@ def build_micro_resnet() -> tf.keras.Model:
         loss="sparse_categorical_crossentropy",
         metrics=["accuracy"],
     )
-    model.summary()
+    model.summary(line_length=80)
     return model
 
 

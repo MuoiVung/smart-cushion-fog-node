@@ -93,29 +93,45 @@ def _extract_22_features(raw_2d: np.ndarray) -> np.ndarray:
     """
     Convert (1, 9) raw FSR array into (1, 22) feature vector.
     Identical to extract_features() in train_rf.py / train_fnn.py.
-
-    Layout: [FL(0), FM(1), FR(2), ML(3), MM(4), MR(5), BL(6), BM(7), BR(8)]
     """
-    f  = raw_2d.astype(float)
-    ts = np.where(f.sum(1, keepdims=True) == 0, 1.0, f.sum(1, keepdims=True)).squeeze(1)
+    f = raw_2d.astype(float)
+    total = f.sum(axis=1, keepdims=True)
+    ts = np.where(total == 0, 1.0, total) # shape (N, 1)
 
-    front = f[:, [0, 1, 2]].sum(1);  back  = f[:, [6, 7, 8]].sum(1)
-    left  = f[:, [0, 3, 6]].sum(1);  right = f[:, [2, 5, 8]].sum(1)
-    mid_r = f[:, [3, 4, 5]].sum(1)
+    # 1. Normalize raw FSR inputs (sum-to-1 per row)
+    f_norm = f / ts
 
-    cop_x     = (right - left) / ts
-    cop_y     = (front - back) / ts
-    diag_diff = ((f[:, 0] + f[:, 4] + f[:, 8]) -
-                 (f[:, 2] + f[:, 4] + f[:, 6])) / ts
+    front = f_norm[:, [0, 1, 2]].sum(1)
+    back  = f_norm[:, [6, 7, 8]].sum(1)
+    left  = f_norm[:, [0, 3, 6]].sum(1)
+    right = f_norm[:, [2, 5, 8]].sum(1)
+    mid_r = f_norm[:, [3, 4, 5]].sum(1)
 
-    eng = np.stack([
+    # Center of Pressure (–1 … +1)
+    cop_x = right - left
+    cop_y = front - back
+
+    # Diagonal asymmetry
+    diag_main = f_norm[:, 0] + f_norm[:, 4] + f_norm[:, 8]
+    diag_anti = f_norm[:, 2] + f_norm[:, 4] + f_norm[:, 6]
+    diag_diff = diag_main - diag_anti
+
+    # Weight-invariant statistics
+    std_v = f_norm.std(1)
+    max_v = f_norm.max(1)
+    min_v = f_norm.min(1)
+    var_v = f_norm.var(1)
+
+    # 13 engineered features (all normalized)
+    engineered = np.stack([
         cop_x, cop_y, diag_diff,
-        f.std(1), f.max(1), f.min(1), f.var(1),
-        front / ts, back / ts, left / ts, right / ts,
-        mid_r / ts, f[:, 4] / ts,
-    ], axis=1)                          # (1, 13)
+        std_v, max_v, min_v, var_v,
+        front, back,
+        left, right,
+        mid_r, f_norm[:, 4],
+    ], axis=1) # shape (N, 13)
 
-    return np.concatenate([f, eng], axis=1)   # (1, 22)
+    return np.concatenate([f_norm, engineered], axis=1) # (N, 22)
 
 
 class InferenceEngine:

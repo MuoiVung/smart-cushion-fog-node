@@ -159,7 +159,7 @@ def build_tiny_cnn() -> tf.keras.Model:
         loss="sparse_categorical_crossentropy",
         metrics=["accuracy"],
     )
-    model.summary()
+    model.summary(line_length=80)
     return model
 
 
@@ -239,7 +239,7 @@ def save_model(model, scaler) -> tuple:
     d  = os.path.join("ai", "models"); os.makedirs(d, exist_ok=True)
     v  = _next_version(d, "posture_tiny_cnn", "keras")
     mp = os.path.join(d, f"posture_tiny_cnn_v{v}.keras")
-    sp = os.path.join(d, f"scaler_cnn_v{v}.pkl")
+    sp = os.path.join(d, f"scaler_tiny_cnn_v{v}.pkl")
     model.save(mp)
     joblib.dump(scaler, sp)
     print(f"\n  ✅ Model  → {mp}")

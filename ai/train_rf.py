@@ -55,45 +55,46 @@ FSR_COLS = [
 def extract_features(raw_9: np.ndarray) -> np.ndarray:
     """
     Input : (N, 9) raw FSR values
-    Output: (N, 22)  raw + engineered features
-
-    Sensor layout:
-        [FL(0), FM(1), FR(2),
-         ML(3), MM(4), MR(5),
-         BL(6), BM(7), BR(8)]
+    Output: (N, 22) fully weight-invariant features (normalized by total pressure)
     """
     f = raw_9.astype(float)
     total = f.sum(axis=1, keepdims=True)
-    ts    = np.where(total == 0, 1.0, total).squeeze(1)   # safe denominator
+    ts = np.where(total == 0, 1.0, total) # shape (N, 1)
 
-    front = f[:, [0, 1, 2]].sum(1)
-    back  = f[:, [6, 7, 8]].sum(1)
-    left  = f[:, [0, 3, 6]].sum(1)
-    right = f[:, [2, 5, 8]].sum(1)
-    mid_r = f[:, [3, 4, 5]].sum(1)
+    # 1. Normalize raw FSR inputs (sum-to-1 per row)
+    f_norm = f / ts
+
+    front = f_norm[:, [0, 1, 2]].sum(1)
+    back  = f_norm[:, [6, 7, 8]].sum(1)
+    left  = f_norm[:, [0, 3, 6]].sum(1)
+    right = f_norm[:, [2, 5, 8]].sum(1)
+    mid_r = f_norm[:, [3, 4, 5]].sum(1)
 
     # Center of Pressure (–1 … +1)
-    cop_x = (right - left)  / ts          # positive → lean right
-    cop_y = (front - back)  / ts          # positive → lean forward
+    cop_x = right - left
+    cop_y = front - back
 
-    # Diagonal asymmetry (cross-leg detection)
-    diag_main = f[:, 0] + f[:, 4] + f[:, 8]   # FL + MM + BR
-    diag_anti = f[:, 2] + f[:, 4] + f[:, 6]   # FR + MM + BL
-    diag_diff = (diag_main - diag_anti) / ts
+    # Diagonal asymmetry
+    diag_main = f_norm[:, 0] + f_norm[:, 4] + f_norm[:, 8]
+    diag_anti = f_norm[:, 2] + f_norm[:, 4] + f_norm[:, 6]
+    diag_diff = diag_main - diag_anti
 
-    # Statistics
-    std_v = f.std(1);  max_v = f.max(1);  min_v = f.min(1);  var_v = f.var(1)
+    # Weight-invariant statistics
+    std_v = f_norm.std(1)
+    max_v = f_norm.max(1)
+    min_v = f_norm.min(1)
+    var_v = f_norm.var(1)
 
-    # Normalised regional ratios  (weight-invariant)
+    # 13 engineered features (all normalized)
     engineered = np.stack([
         cop_x, cop_y, diag_diff,
         std_v, max_v, min_v, var_v,
-        front / ts, back / ts,
-        left  / ts, right / ts,
-        mid_r / ts, f[:, 4] / ts,   # centre-sensor ratio
-    ], axis=1)                        # shape (N, 13)
+        front, back,
+        left, right,
+        mid_r, f_norm[:, 4],
+    ], axis=1) # shape (N, 13)
 
-    return np.concatenate([f, engineered], axis=1)   # (N, 22)
+    return np.concatenate([f_norm, engineered], axis=1) # (N, 22)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -213,10 +214,11 @@ def train(X: np.ndarray, y: np.ndarray, g: np.ndarray):
         acc = accuracy_score(y[te], y_pred) * 100
         fold_accs.append(acc)
 
-        label_names = [POSTURE_INFO[k]["label"]
-                       for k in sorted(np.unique(y[te]))]
+        all_classes = sorted(np.unique(np.concatenate([y[te], y_pred])))
+        label_names  = [POSTURE_INFO[k]["label"] for k in all_classes]
         print(f"  Accuracy: {acc:.2f}%")
-        print(classification_report(y[te], y_pred, target_names=label_names, zero_division=0))
+        print(classification_report(y[te], y_pred, labels=all_classes,
+                                    target_names=label_names, zero_division=0))
 
     print(f"\n{'='*55}")
     print(f"  LOSO CV  →  mean {np.mean(fold_accs):.2f}%  ±  {np.std(fold_accs):.2f}%")
