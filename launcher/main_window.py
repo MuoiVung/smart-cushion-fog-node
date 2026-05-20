@@ -621,7 +621,71 @@ class FogLauncherApp(ctk.CTk):
 
     def _on_apply_smoothing(self) -> None:
         """Validate and hot-send smoothing config via MQTT; persist to LocalDB."""
-        pass # implementation removed for brevity
+        errors = []
+        try:
+            conf = float(self._smooth_conf_var.get().strip())
+            if not (0.0 <= conf <= 1.0):
+                raise ValueError
+        except ValueError:
+            errors.append("Min Confidence must be a number between 0.0 and 1.0")
+            conf = None
+
+        try:
+            window = int(self._smooth_window_var.get().strip())
+            if window < 0:
+                raise ValueError
+            if window == 0:
+                window = 1
+        except ValueError:
+            errors.append("Window Size must be a whole number ≥ 0")
+            window = None
+
+        try:
+            votes = int(self._smooth_votes_var.get().strip())
+            if votes < 0:
+                raise ValueError
+            if votes == 0:
+                votes = 1
+        except ValueError:
+            errors.append("Min Votes must be a whole number ≥ 0")
+            votes = None
+
+        if window is not None and votes is not None:
+            if votes > window:
+                errors.append("Min Votes cannot be greater than Window Size")
+
+        if errors:
+            self._smooth_status_lbl.configure(
+                text="⚠️  " + "  |  ".join(errors), text_color=COLOR["red"]
+            )
+            return
+
+        # Persist to LocalDB (survives restarts)
+        self._db.set_config("min_confidence",       str(conf))
+        self._db.set_config("smoothing_window_size", str(window))
+        self._db.set_config("smoothing_min_votes",   str(votes))
+
+        # Hot-update running Fog Node via MQTT (no restart needed)
+        if self._mqtt_connected:
+            payload = {"min_confidence": conf, "smoothing_window_size": window,
+                       "smoothing_min_votes": votes}
+            import json as _json
+            self._mqtt_monitor._client.publish(
+                "cushion/fog/config", _json.dumps(payload), qos=1
+            )
+            self._smooth_status_lbl.configure(
+                text=f"✅ Applied: conf={conf:.0%} | window={window} | votes={votes}",
+                text_color=COLOR["green"]
+            )
+            self._log_console(
+                f"Smoothing updated — conf={conf:.0%}, window={window}, votes={votes}"
+            )
+        else:
+            self._smooth_status_lbl.configure(
+                text="ℹ️  Saved to DB. Will take effect on next Fog Node start.",
+                text_color=COLOR["yellow"]
+            )
+            self._log_console("Smoothing saved to LocalDB (Fog Node not connected)")
 
     def _on_retrain_ai(self, model_type: str, dataset_path: str) -> None:
         """Triggers the specific AI training script in a separate thread."""
@@ -760,63 +824,7 @@ class FogLauncherApp(ctk.CTk):
                 return str(latest.relative_to(PROJECT_ROOT))
             except ValueError:
                 return str(latest)
-        errors = []
-        try:
-            conf = float(self._smooth_conf_var.get().strip())
-            if not (0.0 <= conf <= 1.0):
-                raise ValueError
-        except ValueError:
-            errors.append("Min Confidence must be a number between 0.0 and 1.0")
-            conf = None
 
-        try:
-            window = int(self._smooth_window_var.get().strip())
-            if window < 1:
-                raise ValueError
-        except ValueError:
-            errors.append("Window Size must be a whole number ≥ 1")
-            window = None
-
-        try:
-            votes = int(self._smooth_votes_var.get().strip())
-            if votes < 1:
-                raise ValueError
-        except ValueError:
-            errors.append("Min Votes must be a whole number ≥ 1")
-            votes = None
-
-        if errors:
-            self._smooth_status_lbl.configure(
-                text="⚠️  " + "  |  ".join(errors), text_color=COLOR["red"]
-            )
-            return
-
-        # Persist to LocalDB (survives restarts)
-        self._db.set_config("min_confidence",       str(conf))
-        self._db.set_config("smoothing_window_size", str(window))
-        self._db.set_config("smoothing_min_votes",   str(votes))
-
-        # Hot-update running Fog Node via MQTT (no restart needed)
-        if self._mqtt_connected:
-            payload = {"min_confidence": conf, "smoothing_window_size": window,
-                       "smoothing_min_votes": votes}
-            import json as _json
-            self._mqtt_monitor._client.publish(
-                "cushion/fog/config", _json.dumps(payload), qos=1
-            )
-            self._smooth_status_lbl.configure(
-                text=f"✅ Applied: conf={conf:.0%} | window={window} | votes={votes}",
-                text_color=COLOR["green"]
-            )
-            self._log_console(
-                f"Smoothing updated — conf={conf:.0%}, window={window}, votes={votes}"
-            )
-        else:
-            self._smooth_status_lbl.configure(
-                text="ℹ️  Saved to DB. Will take effect on next Fog Node start.",
-                text_color=COLOR["yellow"]
-            )
-            self._log_console("Smoothing saved to LocalDB (Fog Node not connected)")
 
     # ── Cloud Queue ──────────────────────────────────────────────────────
 
