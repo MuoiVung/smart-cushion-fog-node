@@ -26,6 +26,8 @@ ai/models/*.pt
 ai/models/*.pth
 ai/models/*.onnx
 ai/models/*.bin
+ai/models/*.pkl
+ai/models/*.keras
 
 # ── Python ────────────────────────────────────────────────
 __pycache__/
