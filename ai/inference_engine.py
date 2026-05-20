@@ -230,10 +230,13 @@ class InferenceEngine:
             - confidence: float ∈ [0.0, 1.0].
             - top_3: list of {"label": str, "confidence": float} sorted by confidence desc.
         """
-        # ── Step 1: Empty Detection (Heuristic) ─────────────────────────────
-        # If total pressure is very low, it's definitely empty.
+        # ── Step 1: Empty & Low-Quality Detection (Heuristic) ───────────────
         total_pressure = float(np.sum(raw_sensors))
-        if total_pressure < 200:
+        active_sensors = int(np.sum(raw_sensors > 50))
+        
+        # If total pressure is very low, or less than 3 sensors are active,
+        # it is considered empty (no person sitting / only hands/objects touching).
+        if total_pressure < 200 or active_sensors < 3:
             return PostureLabel.EMPTY, 1.0, [{"label": "empty", "confidence": 1.0}]
 
         # ── Step 2: Run AI Inference ────────────────────────────────────────
