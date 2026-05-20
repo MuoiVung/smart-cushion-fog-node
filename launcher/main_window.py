@@ -1082,22 +1082,22 @@ class FogLauncherApp(ctk.CTk):
     def _on_model_mode_change(self) -> None:
         mode = self._model_mode.get()
 
-        # Models that require a .keras file + a .pkl scaler
-        KERAS_WITH_SCALER = {"fnn", "tiny_cnn", "resnet", "keras"}
-        # Models that use only a .pkl file, no separate scaler
-        PKL_NO_SCALER = {"random_forest"}
+        # Models that require a separate .pkl scaler file
+        SCALER_REQUIRED = {"fnn"}
 
-        if mode in KERAS_WITH_SCALER:
-            label_text = {
-                "keras":    "Model CNN Legacy (.h5):",
-                "fnn":      "Model FNN (.keras):",
-                "tiny_cnn": "Model Tiny CNN (.keras):",
-                "resnet":   "Model ResNet (.keras):",
-            }.get(mode, "Model (.keras):")
-            self._model_lbl.configure(text=label_text)
-            self._model_entry.configure(state="normal")
-            self._browse_btn.configure(state="normal")
+        label_text = {
+            "keras":         "Model CNN Legacy (.h5):",
+            "fnn":           "Model FNN (.keras):",
+            "tiny_cnn":      "Model Tiny CNN (.keras):",
+            "resnet":        "Model ResNet (.keras):",
+            "random_forest": "Model (.pkl):",
+        }.get(mode, "Model:")
+        
+        self._model_lbl.configure(text=label_text)
+        self._model_entry.configure(state="normal")
+        self._browse_btn.configure(state="normal")
 
+        if mode in SCALER_REQUIRED:
             # Show scaler elements
             if hasattr(self, "_scaler_lbl"):
                 self._scaler_lbl.grid(row=4, column=0, padx=16, pady=4, sticky="e")
@@ -1110,11 +1110,7 @@ class FogLauncherApp(ctk.CTk):
 
             self._model_match_label.configure(text="")
 
-        elif mode in PKL_NO_SCALER:
-            self._model_lbl.configure(text="Model (.pkl):")
-            self._model_entry.configure(state="normal")
-            self._browse_btn.configure(state="normal")
-
+        else:
             # Hide scaler elements
             if hasattr(self, "_scaler_lbl"):
                 self._scaler_lbl.grid_forget()
@@ -1123,8 +1119,13 @@ class FogLauncherApp(ctk.CTk):
             if hasattr(self, "_scaler_browse_btn"):
                 self._scaler_browse_btn.grid_forget()
 
+            info_text = (
+                "ℹ️ Random Forest does not require a Scaler file."
+                if mode == "random_forest"
+                else "ℹ️ CNN / ResNet does not require a Scaler file (uses built-in L1 normalization)."
+            )
             self._model_match_label.configure(
-                text=f"ℹ️ Random Forest does not require a Scaler file.",
+                text=info_text,
                 text_color=COLOR["blue"]
             )
 
@@ -1132,7 +1133,7 @@ class FogLauncherApp(ctk.CTk):
         self._auto_select_model_and_scaler_for_mode(mode)
 
     def _auto_select_model_and_scaler_for_mode(self, mode: str) -> None:
-        KERAS_WITH_SCALER = {"fnn", "tiny_cnn", "resnet", "keras"}
+        KERAS_WITH_SCALER = {"fnn"}
         
         # 1. Try to load from DB
         last_model = self._db.get_config(f"last_model_path_{mode}", "")
@@ -1425,7 +1426,7 @@ class FogLauncherApp(ctk.CTk):
     def _on_apply_model(self) -> None:
         mode = self._model_mode.get()
         ALL_MODES = {"keras", "random_forest", "fnn", "tiny_cnn", "resnet"}
-        SCALER_REQUIRED = {"keras", "fnn", "tiny_cnn", "resnet"}
+        SCALER_REQUIRED = {"fnn"}
 
         if mode not in ALL_MODES:
             return
@@ -1785,4 +1786,11 @@ class FogLauncherApp(ctk.CTk):
         """Clean up on window close."""
         self._mqtt_monitor.stop()
         self._ws_monitor.stop()
+        
+        # Stop background services synchronously to prevent orphaned processes
+        try:
+            self._docker._do_stop()
+        except Exception as e:
+            print(f"Error stopping services on exit: {e}")
+            
         self.destroy()
