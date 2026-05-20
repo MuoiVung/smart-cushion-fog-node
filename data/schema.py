@@ -30,41 +30,36 @@ from pydantic import BaseModel, Field
 
 class PostureLabel(str, Enum):
     """
-    11 AI output labels (system_architecture.md §1).
+    7 AI output labels (system_architecture.md §1).
 
     Surface state (2 labels):
       empty   – no person or object on the cushion
       object  – something placed on cushion, but NOT a seated person
 
-    Posture labels (9 labels, person is seated):
-      NUP, LF, LB, LFSR, LFSL, CRL, CLL, CRLL, CLLL
+    Posture labels (5 macro-labels, person is seated):
+      UPRIGHT, FORWARD, BACKWARD, RIGHT, LEFT
     """
     # Surface state labels
     EMPTY  = "EMPTY"   # Nothing on cushion
     OBJECT = "OBJECT"  # Object detected, not a person
 
     # Posture labels (person is seated)
-    NUP  = "NUP"   # Natural Upright Posture – correct posture
-    LF   = "LF"    # Lean Forward
-    LB   = "LB"    # Lean Backward
-    LFSR = "LFSR"  # Lean Forward-Support Right
-    LFSL = "LFSL"  # Lean Forward-Support Left
-    CRL  = "CRL"   # Cross-Right Legged
-    CLL  = "CLL"   # Cross-Left Legged
-    CRLL = "CRLL"  # Cross-Right Legged-Legged
-    CLLL = "CLLL"  # Cross-Left Legged-Legged
-    UNKNOWN = "UNKNOWN" # Unknown or error state
+    UPRIGHT  = "UPRIGHT"   # Sitting Upright – correct posture
+    FORWARD  = "FORWARD"   # Leaning Forward
+    BACKWARD = "BACKWARD"  # Leaning Backward
+    RIGHT    = "RIGHT"     # Leaning Right
+    LEFT     = "LEFT"      # Leaning Left
+    UNKNOWN  = "UNKNOWN"   # Unknown or error state
 
 
 
-# Only NUP is a correct seated posture (no vibration alert)
-GOOD_POSTURES: frozenset[PostureLabel] = frozenset({PostureLabel.NUP})
+# Only UPRIGHT is a correct seated posture (no vibration alert)
+GOOD_POSTURES: frozenset[PostureLabel] = frozenset({PostureLabel.UPRIGHT})
 
 # Labels that indicate a human is actually seated (for session tracking)
 SITTING_POSTURES: frozenset[PostureLabel] = frozenset({
-    PostureLabel.NUP,  PostureLabel.LF,   PostureLabel.LB,
-    PostureLabel.LFSR, PostureLabel.LFSL, PostureLabel.CRL,
-    PostureLabel.CLL,  PostureLabel.CRLL, PostureLabel.CLLL,
+    PostureLabel.UPRIGHT, PostureLabel.FORWARD, PostureLabel.BACKWARD,
+    PostureLabel.RIGHT, PostureLabel.LEFT
 })
 
 # Map each AI label → OccupancyState (defined below, forward ref)
@@ -260,15 +255,11 @@ class CloudTelemetryRecord(BaseModel):
 
 class PostureDurationBreakdown(BaseModel):
     """Per-posture accumulated duration in seconds for a session summary."""
-    nup_duration_sec:  int = 0
-    lf_duration_sec:   int = 0
-    lb_duration_sec:   int = 0
-    lfsr_duration_sec: int = 0
-    lfsl_duration_sec: int = 0
-    crl_duration_sec:  int = 0
-    cll_duration_sec:  int = 0
-    crll_duration_sec: int = 0
-    clll_duration_sec: int = 0
+    upright_duration_sec:  int = 0
+    forward_duration_sec:  int = 0
+    backward_duration_sec: int = 0
+    right_duration_sec:    int = 0
+    left_duration_sec:     int = 0
 
 
 class CloudSummaryRecord(BaseModel):

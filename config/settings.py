@@ -64,13 +64,17 @@ class Settings(BaseSettings):
     )
 
     # ── AI Model (system_architecture.md §1) ─────────────────────────────────
+    model_type:  str = Field(
+        default="keras",
+        description="Model architecture type: keras, tiny_cnn, resnet, fnn, random_forest",
+    )
     model_path:  str = Field(
         default="ai/models/smart_cushion_model.h5",
-        description="Path to the Keras CNN model (.h5) trained in smart-cushion-AI",
+        description="Path to the Keras CNN model (.h5) trained in smart-cushion-AI or RF model (.pkl)",
     )
     scaler_path: str = Field(
         default="ai/models/fsr_scaler.pkl",
-        description="Path to the sklearn MinMaxScaler (.pkl) used during CNN training",
+        description="Path to the sklearn MinMaxScaler (.pkl) used during CNN training (optional for RF)",
     )
     temperature_threshold: float = Field(
         default=30.0,

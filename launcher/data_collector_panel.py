@@ -21,15 +21,11 @@ EXPORT_DIR = paths.get_export_dir()
 LABEL_MAP = {
     "EMPTY (Cushion is empty)": "EMPTY",
     "OBJECT (Non-human object)": "OBJECT",
-    "NUP (Natural Upright Posture)": "NUP",
-    "LF (Lean Forward)": "LF",
-    "LB (Lean Backward)": "LB",
-    "LFSR (Lean Forward-Support Right)": "LFSR",
-    "LFSL (Lean Forward-Support Left)": "LFSL",
-    "CRL (Cross-Right Legged)": "CRL",
-    "CLL (Cross-Left Legged)": "CLL",
-    "CRLL (Cross-Right Legged-Legged)": "CRLL",
-    "CLLL (Cross-Left Legged-Legged)": "CLLL"
+    "UPRIGHT (Sitting Upright)": "UPRIGHT",
+    "FORWARD (Leaning Forward)": "FORWARD",
+    "BACKWARD (Leaning Backward)": "BACKWARD",
+    "RIGHT (Leaning Right)": "RIGHT",
+    "LEFT (Leaning Left)": "LEFT"
 }
 
 class DataCollectorPanel(ctk.CTkFrame):
@@ -61,7 +57,7 @@ class DataCollectorPanel(ctk.CTkFrame):
         # ── Load Labels ───────────────────────────────────────────────────
         self.saved_labels = self._load_labels()
         if not self.saved_labels:
-            self.saved_labels = ["Sitting straight", "Leaning left", "Leaning right", "Slouch forward", "Leaning back"]
+            self.saved_labels = ["UPRIGHT (Sitting Upright)", "FORWARD (Leaning Forward)", "BACKWARD (Leaning Backward)", "RIGHT (Leaning Right)", "LEFT (Leaning Left)"]
             self._save_labels()
 
         # ── UI Construction ────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 [
-  "Sitting straight",
-  "Leaning left",
-  "Leaning right",
-  "Slouch forward",
-  "Leaning back"
+  "UPRIGHT (Sitting Upright)",
+  "FORWARD (Leaning Forward)",
+  "BACKWARD (Leaning Backward)",
+  "RIGHT (Leaning Right)",
+  "LEFT (Leaning Left)"
 ]

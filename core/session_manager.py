@@ -38,15 +38,11 @@ class SessionManager:
         
         # Breakdown counters for each posture
         self._durations = {
-            PostureLabel.NUP: 0.0,
-            PostureLabel.LF: 0.0,
-            PostureLabel.LB: 0.0,
-            PostureLabel.LFSR: 0.0,
-            PostureLabel.LFSL: 0.0,
-            PostureLabel.CRL: 0.0,
-            PostureLabel.CLL: 0.0,
-            PostureLabel.CRLL: 0.0,
-            PostureLabel.CLLL: 0.0,
+            PostureLabel.UPRIGHT: 0.0,
+            PostureLabel.FORWARD: 0.0,
+            PostureLabel.BACKWARD: 0.0,
+            PostureLabel.RIGHT: 0.0,
+            PostureLabel.LEFT: 0.0,
         }
 
     # ── Public API ─────────────────────────────────────────────────────────
@@ -94,15 +90,11 @@ class SessionManager:
         Build a CloudSummaryRecord from the tracked statistics.
         """
         breakdown = PostureDurationBreakdown(
-            nup_duration_sec=int(self._durations[PostureLabel.NUP]),
-            lf_duration_sec=int(self._durations[PostureLabel.LF]),
-            lb_duration_sec=int(self._durations[PostureLabel.LB]),
-            lfsr_duration_sec=int(self._durations[PostureLabel.LFSR]),
-            lfsl_duration_sec=int(self._durations[PostureLabel.LFSL]),
-            crl_duration_sec=int(self._durations[PostureLabel.CRL]),
-            cll_duration_sec=int(self._durations[PostureLabel.CLL]),
-            crll_duration_sec=int(self._durations[PostureLabel.CRLL]),
-            clll_duration_sec=int(self._durations[PostureLabel.CLLL]),
+            upright_duration_sec=int(self._durations[PostureLabel.UPRIGHT]),
+            forward_duration_sec=int(self._durations[PostureLabel.FORWARD]),
+            backward_duration_sec=int(self._durations[PostureLabel.BACKWARD]),
+            right_duration_sec=int(self._durations[PostureLabel.RIGHT]),
+            left_duration_sec=int(self._durations[PostureLabel.LEFT]),
         )
 
         return CloudSummaryRecord(

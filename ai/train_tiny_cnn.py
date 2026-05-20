@@ -44,27 +44,19 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 # 0.  POSTURE CONFIG
 # ═══════════════════════════════════════════════════════════
 POSTURE_INFO = {
-    0: {"label": "NUP",  "name": "Neutral Upright Posture"},
-    1: {"label": "LF",   "name": "Leaning Forward"},
-    2: {"label": "LB",   "name": "Leaning Backward"},
-    3: {"label": "LFSR", "name": "Lean Forward + Support Right"},
-    4: {"label": "LFSL", "name": "Lean Forward + Support Left"},
-    5: {"label": "CRL",  "name": "Cross Right Leg (Ankle on Knee)"},
-    6: {"label": "CLL",  "name": "Cross Left Leg (Ankle on Knee)"},
-    7: {"label": "CRLL", "name": "Cross Right Leg (Thigh on Thigh)"},
-    8: {"label": "CLLL", "name": "Cross Left Leg (Thigh on Thigh)"},
+    0: {"label": "UPRIGHT",  "name": "Sitting Upright"},
+    1: {"label": "FORWARD",  "name": "Leaning Forward"},
+    2: {"label": "BACKWARD", "name": "Leaning Backward"},
+    3: {"label": "RIGHT",    "name": "Leaning Right"},
+    4: {"label": "LEFT",     "name": "Leaning Left"},
 }
 
 FILE_MAP = {
-    "straight": 0, "NUP": 0,
-    "leaning_forward": 1, "LF": 1,
-    "leaning_backward": 2, "LB": 2,
-    "support_right": 3, "LFSR": 3,
-    "support_left":  4, "LFSL": 4,
-    "cross_right_ankle": 5, "CRL":  5,
-    "cross_left_ankle":  6, "CLL":  6,
-    "cross_right_knee":  7, "CRLL": 7,
-    "cross_left_knee":   8, "CLLL": 8,
+    "upright": 0, "nup": 0, "straight": 0,
+    "forward": 1, "lf": 1, "leaning_forward": 1,
+    "backward": 2, "lb": 2, "leaning_backward": 2,
+    "right": 3, "lfsr": 3, "cll": 3, "clll": 3, "support_right": 3, "cross_left_ankle": 3, "cross_left_knee": 3,
+    "left": 4, "lfsl": 4, "crl": 4, "crll": 4, "support_left": 4, "cross_right_ankle": 4, "cross_right_knee": 4,
 }
 
 FSR_COLS = [
@@ -84,8 +76,20 @@ def _noise_filter(df: pd.DataFrame) -> pd.DataFrame:
     df = df[(df[FSR_COLS] > 20).sum(axis=1) >= 3]
     if df.empty:
         return df
-    tp = df[FSR_COLS].sum(axis=1);  m = tp.mean()
-    return df[(tp >= m * 0.75) & (tp <= m * 1.25)]
+    tp = df[FSR_COLS].sum(axis=1)
+    m  = tp.mean()
+    df = df[(tp >= m * 0.75) & (tp <= m * 1.25)]
+    if df.empty:
+        return df
+
+    # Transition noise filter: remove frames that deviate from the stable posture shape
+    raw = df[FSR_COLS].values.astype(float)
+    row_sums = raw.sum(axis=1, keepdims=True)
+    row_sums_safe = np.where(row_sums == 0, 1.0, row_sums)
+    normalized = raw / row_sums_safe
+    median_posture = np.median(normalized, axis=0)
+    distances = np.linalg.norm(normalized - median_posture, axis=1)
+    return df[distances <= 0.15]
 
 
 def _subject_id(fp: str, folder_map: dict) -> int:
@@ -154,7 +158,7 @@ def build_tiny_cnn() -> tf.keras.Model:
     x   = layers.GlobalAveragePooling2D(name="gap")(x)
     x   = layers.Dense(16, activation="relu", name="hidden")(x)
     x   = layers.Dropout(0.2, name="dropout")(x)
-    out = layers.Dense(9, activation="softmax", name="posture")(x)
+    out = layers.Dense(5, activation="softmax", name="posture")(x)
 
     model = models.Model(inp, out, name="TinyCNN_Posture")
     model.compile(
@@ -171,9 +175,19 @@ def build_tiny_cnn() -> tf.keras.Model:
 # ═══════════════════════════════════════════════════════════
 def train(X: np.ndarray, y: np.ndarray, g: np.ndarray):
     n_subj = len(np.unique(g))
-    gkf    = GroupKFold(n_splits=n_subj)
+    if n_subj < 2:
+        from sklearn.model_selection import StratifiedKFold
+        gkf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        print(f"\n  [CNN] Only {n_subj} subject found. Falling back to 5-Fold StratifiedKFold CV.")
+    else:
+        gkf = GroupKFold(n_splits=n_subj)
 
-    print(f"\n{'='*55}\n  [CNN] {n_subj}-FOLD LEAVE-ONE-SUBJECT-OUT CV\n{'='*55}")
+    print(f"\n{'='*55}")
+    if n_subj < 2:
+        print(f"  [CNN] 5-FOLD STRATIFIED K-FOLD CV")
+    else:
+        print(f"  [CNN] {n_subj}-FOLD LEAVE-ONE-SUBJECT-OUT CV")
+    print(f"{'='*55}")
 
     best_model, best_scaler, best_acc = None, None, 0.0
     fold_accs = []

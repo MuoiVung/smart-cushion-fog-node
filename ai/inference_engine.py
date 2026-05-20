@@ -50,39 +50,47 @@ logger = logging.getLogger(__name__)
 
 # ── Full ordered label list (model output index → PostureLabel) ────────────
 # Update this when a multi-class model is trained:
-# ── 9-posture model (excludes empty and object) ──────────────────────────
-POSTURE_LABELS_9: list[PostureLabel] = [
-    PostureLabel.NUP,     # 0
-    PostureLabel.LF,      # 1
-    PostureLabel.LB,      # 2
-    PostureLabel.LFSR,    # 3
-    PostureLabel.LFSL,    # 4
-    PostureLabel.CRL,     # 5
-    PostureLabel.CLL,     # 6
-    PostureLabel.CRLL,    # 7
-    PostureLabel.CLLL,    # 8
+POSTURE_LABELS_5: list[PostureLabel] = [
+    PostureLabel.UPRIGHT,  # 0
+    PostureLabel.FORWARD,  # 1
+    PostureLabel.BACKWARD, # 2
+    PostureLabel.RIGHT,    # 3
+    PostureLabel.LEFT,     # 4
 ]
 
-# Full 11-label list (for legacy/future support)
+# Full 11-label list (for legacy/future support, mapped to 5 macro-labels)
 POSTURE_LABELS_11: list[PostureLabel] = [
     PostureLabel.EMPTY,
     PostureLabel.OBJECT,
-    PostureLabel.NUP,
-    PostureLabel.LF,
-    PostureLabel.LB,
-    PostureLabel.LFSR,
-    PostureLabel.LFSL,
-    PostureLabel.CRL,
-    PostureLabel.CLL,
-    PostureLabel.CRLL,
-    PostureLabel.CLLL,
+    PostureLabel.UPRIGHT,
+    PostureLabel.FORWARD,
+    PostureLabel.BACKWARD,
+    PostureLabel.RIGHT,
+    PostureLabel.LEFT,
+    PostureLabel.LEFT,
+    PostureLabel.RIGHT,
+    PostureLabel.LEFT,
+    PostureLabel.RIGHT,
+]
+
+# Full 9-label list (for legacy 9-posture models, mapped to 5 macro-labels)
+POSTURE_LABELS_9: list[PostureLabel] = [
+    PostureLabel.UPRIGHT,
+    PostureLabel.FORWARD,
+    PostureLabel.BACKWARD,
+    PostureLabel.RIGHT,
+    PostureLabel.LEFT,
+    PostureLabel.LEFT,
+    PostureLabel.RIGHT,
+    PostureLabel.LEFT,
+    PostureLabel.RIGHT,
 ]
 
 # ── Current binary model output mapping ───────────────────────────────────
-# score ≥ 0.5 → "Sitting Straight" → NUP
-# score < 0.5 → "Incorrect/Leaning" → LF (generic bad posture)
-_BINARY_POS_LABEL = PostureLabel.NUP   # score ≥ 0.5
-_BINARY_NEG_LABEL = PostureLabel.LF    # score < 0.5
+# score ≥ 0.5 → "Sitting Upright" → UPRIGHT
+# score < 0.5 → "Incorrect/Leaning" → FORWARD (generic bad posture)
+_BINARY_POS_LABEL = PostureLabel.UPRIGHT   # score ≥ 0.5
+_BINARY_NEG_LABEL = PostureLabel.FORWARD   # score < 0.5
 
 # FSR total-pressure thresholds for the rule-based regime
 _EMPTY_THRESHOLD  = 1000    # below this → empty (sum of all 9 ADC values)
@@ -222,10 +230,13 @@ class InferenceEngine:
             - confidence: float ∈ [0.0, 1.0].
             - top_3: list of {"label": str, "confidence": float} sorted by confidence desc.
         """
-        # ── Step 1: Empty Detection (Heuristic) ─────────────────────────────
-        # If total pressure is very low, it's definitely empty.
+        # ── Step 1: Empty & Low-Quality Detection (Heuristic) ───────────────
         total_pressure = float(np.sum(raw_sensors))
-        if total_pressure < 200:
+        active_sensors = int(np.sum(raw_sensors > 50))
+        
+        # If total pressure is very low, or less than 3 sensors are active,
+        # it is considered empty (no person sitting / only hands/objects touching).
+        if total_pressure < 200 or active_sensors < 3:
             return PostureLabel.EMPTY, 1.0, [{"label": "empty", "confidence": 1.0}]
 
         # ── Step 2: Run AI Inference ────────────────────────────────────────
@@ -284,19 +295,38 @@ class InferenceEngine:
                 confidence    = float(predictions[predicted_idx])
                 
                 # Use appropriate label list based on output count
-                # If exactly 11 classes, use 11-label list (includes Empty/Object)
-                # Otherwise assume it's a 9-posture model (or a partial subset of it)
-                labels = POSTURE_LABELS_11 if len(predictions) == 11 else POSTURE_LABELS_9
-                label = labels[predicted_idx]
+                if len(predictions) == 11:
+                    labels = POSTURE_LABELS_11
+                elif len(predictions) == 9:
+                    labels = POSTURE_LABELS_9
+                elif len(predictions) == 5:
+                    labels = POSTURE_LABELS_5
+                else:
+                    logger.warning(f"Unexpected prediction count: {len(predictions)}. Defaulting to 5-label mapping.")
+                    labels = POSTURE_LABELS_5
 
-                # Get top 3
+                # Safe indexing for main label
+                if predicted_idx < len(labels):
+                    label = labels[predicted_idx]
+                else:
+                    logger.error(f"Predicted index {predicted_idx} is out of bounds for labels array (size {len(labels)})")
+                    label = PostureLabel.UNKNOWN
+
+                # Get top 3 with safety checks
                 top_indices = np.argsort(predictions)[-3:][::-1]
                 top_3 = []
                 for idx in top_indices:
-                    top_3.append({
-                        "label": labels[int(idx)].value,
-                        "confidence": float(round(predictions[idx], 4))
-                    })
+                    idx_int = int(idx)
+                    if idx_int < len(labels):
+                        top_3.append({
+                            "label": labels[idx_int].value,
+                            "confidence": float(round(predictions[idx_int], 4))
+                        })
+                    else:
+                        top_3.append({
+                            "label": PostureLabel.UNKNOWN.value,
+                            "confidence": float(round(predictions[idx_int], 4))
+                        })
                 
                 logger.debug(f"AI multi-class prediction: {label.value} (idx={predicted_idx}, conf={confidence:.3f})")
 
