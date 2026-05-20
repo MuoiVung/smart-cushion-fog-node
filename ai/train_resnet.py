@@ -96,8 +96,20 @@ def _noise_filter(df: pd.DataFrame) -> pd.DataFrame:
     df = df[(df[FSR_COLS] > 20).sum(axis=1) >= 3]
     if df.empty:
         return df
-    tp = df[FSR_COLS].sum(axis=1);  m = tp.mean()
-    return df[(tp >= m * 0.75) & (tp <= m * 1.25)]
+    tp = df[FSR_COLS].sum(axis=1)
+    m  = tp.mean()
+    df = df[(tp >= m * 0.75) & (tp <= m * 1.25)]
+    if df.empty:
+        return df
+
+    # Transition noise filter: remove frames that deviate from the stable posture shape
+    raw = df[FSR_COLS].values.astype(float)
+    row_sums = raw.sum(axis=1, keepdims=True)
+    row_sums_safe = np.where(row_sums == 0, 1.0, row_sums)
+    normalized = raw / row_sums_safe
+    median_posture = np.median(normalized, axis=0)
+    distances = np.linalg.norm(normalized - median_posture, axis=1)
+    return df[distances <= 0.15]
 
 
 def _subject_id(fp: str, folder_map: dict) -> int:
@@ -213,9 +225,19 @@ def build_micro_resnet() -> tf.keras.Model:
 # ═══════════════════════════════════════════════════════════
 def train(X: np.ndarray, y: np.ndarray, g: np.ndarray):
     n_subj = len(np.unique(g))
-    gkf    = GroupKFold(n_splits=n_subj)
+    if n_subj < 2:
+        from sklearn.model_selection import StratifiedKFold
+        gkf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        print(f"\n  [ResNet] Only {n_subj} subject found. Falling back to 5-Fold StratifiedKFold CV.")
+    else:
+        gkf = GroupKFold(n_splits=n_subj)
 
-    print(f"\n{'='*55}\n  [ResNet] {n_subj}-FOLD LEAVE-ONE-SUBJECT-OUT CV\n{'='*55}")
+    print(f"\n{'='*55}")
+    if n_subj < 2:
+        print(f"  [ResNet] 5-FOLD STRATIFIED K-FOLD CV")
+    else:
+        print(f"  [ResNet] {n_subj}-FOLD LEAVE-ONE-SUBJECT-OUT CV")
+    print(f"{'='*55}")
 
     best_model, best_scaler, best_acc = None, None, 0.0
     fold_accs = []

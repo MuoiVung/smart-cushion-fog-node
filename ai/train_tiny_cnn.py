@@ -76,8 +76,20 @@ def _noise_filter(df: pd.DataFrame) -> pd.DataFrame:
     df = df[(df[FSR_COLS] > 20).sum(axis=1) >= 3]
     if df.empty:
         return df
-    tp = df[FSR_COLS].sum(axis=1);  m = tp.mean()
-    return df[(tp >= m * 0.75) & (tp <= m * 1.25)]
+    tp = df[FSR_COLS].sum(axis=1)
+    m  = tp.mean()
+    df = df[(tp >= m * 0.75) & (tp <= m * 1.25)]
+    if df.empty:
+        return df
+
+    # Transition noise filter: remove frames that deviate from the stable posture shape
+    raw = df[FSR_COLS].values.astype(float)
+    row_sums = raw.sum(axis=1, keepdims=True)
+    row_sums_safe = np.where(row_sums == 0, 1.0, row_sums)
+    normalized = raw / row_sums_safe
+    median_posture = np.median(normalized, axis=0)
+    distances = np.linalg.norm(normalized - median_posture, axis=1)
+    return df[distances <= 0.15]
 
 
 def _subject_id(fp: str, folder_map: dict) -> int:
