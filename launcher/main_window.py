@@ -1793,4 +1793,11 @@ class FogLauncherApp(ctk.CTk):
         """Clean up on window close."""
         self._mqtt_monitor.stop()
         self._ws_monitor.stop()
+        
+        # Stop background services synchronously to prevent orphaned processes
+        try:
+            self._docker._do_stop()
+        except Exception as e:
+            print(f"Error stopping services on exit: {e}")
+            
         self.destroy()
