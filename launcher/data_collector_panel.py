@@ -156,6 +156,8 @@ class DataCollectorPanel(ctk.CTkFrame):
         )
         self.btn_refresh_ds.grid(row=0, column=1)
 
+
+
     def _get_train_dataset_options(self) -> List[str]:
         options = ["All Folders"]
         try:
@@ -202,6 +204,7 @@ class DataCollectorPanel(ctk.CTkFrame):
             ("FSR Back Right", "fsr_back_right", True),
             ("Temperature", "temperature", True),
             ("Person Present", "person_present", True),
+            ("AI Prediction", "ai_prediction", True),
         ]
 
         row_idx = 1
@@ -253,16 +256,24 @@ class DataCollectorPanel(ctk.CTkFrame):
         self.status_label = ctk.CTkLabel(frame, text="Ready to collect data...", font=ctk.CTkFont(size=14))
         self.status_label.grid(row=1, column=0, pady=5)
 
+        self.ai_prediction_label = ctk.CTkLabel(
+            frame, 
+            text="Live AI Prediction: None", 
+            font=ctk.CTkFont(size=13, weight="bold"), 
+            text_color="#58a6ff"
+        )
+        self.ai_prediction_label.grid(row=2, column=0, pady=(0, 5))
+
         self.count_label = ctk.CTkLabel(frame, text="Data rows: 0", font=ctk.CTkFont(size=12), text_color="gray")
-        self.count_label.grid(row=2, column=0, pady=(0, 10))
+        self.count_label.grid(row=3, column=0, pady=(0, 10))
 
         self.progress_bar = ctk.CTkProgressBar(frame, mode="determinate")
         self.progress_bar.set(0)
-        self.progress_bar.grid(row=3, column=0, sticky="ew", padx=40)
+        self.progress_bar.grid(row=4, column=0, sticky="ew", padx=40)
 
         # ── AI Retraining Logs UI ──
         self.log_frame = ctk.CTkFrame(frame, corner_radius=12, fg_color="#161b22")
-        self.log_frame.grid(row=4, column=0, padx=20, pady=(15, 5), sticky="nsew")
+        self.log_frame.grid(row=5, column=0, padx=20, pady=(15, 5), sticky="nsew")
         self.log_frame.grid_columnconfigure(0, weight=1)
         self.log_frame.grid_rowconfigure(1, weight=1)
 
@@ -366,8 +377,6 @@ class DataCollectorPanel(ctk.CTkFrame):
         self.label_combo.configure(state="disabled")
         self.person_present_cb.configure(state="disabled")
         self.btn_browse.configure(state="disabled")
-        for cb in self.cb_vars.values():
-            pass
 
         self.btn_action.configure(text="■ STOP", fg_color="#f85149", hover_color="#a40e26")
         self.status_label.configure(text="Collecting...", text_color="#3fb950")
@@ -451,6 +460,7 @@ class DataCollectorPanel(ctk.CTkFrame):
                 "fsr_back_right": "FSR Back Right",
                 "temperature": "Temperature",
                 "person_present": "Person Present",
+                "ai_prediction": "AI Prediction",
                 "label": "Label", # Always explicitly required
                 "posture_name": "Posture Name"
             }
@@ -489,6 +499,11 @@ class DataCollectorPanel(ctk.CTkFrame):
             return None
 
     def process_data(self, payload_dict: Dict[str, Any]):
+        # Extract live AI prediction
+        ai_posture = payload_dict.get("posture_raw", payload_dict.get("posture", "Unknown"))
+        if hasattr(self, "ai_prediction_label"):
+            self.ai_prediction_label.configure(text=f"Live AI Prediction: {ai_posture}")
+
         if not self.is_collecting:
             return
 
@@ -510,6 +525,8 @@ class DataCollectorPanel(ctk.CTkFrame):
             
             # Use manual toggle for data collection session (Human annotation)
             row["person_present"] = self.person_present_var.get()
+            row["ai_prediction"] = ai_posture
+            
             row["label"] = self.current_label
             row["posture_name"] = getattr(self, "current_posture_name", self.current_label)
             

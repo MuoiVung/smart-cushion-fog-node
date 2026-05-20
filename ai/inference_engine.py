@@ -253,11 +253,10 @@ class InferenceEngine:
                 raise ValueError("Model not loaded.")
                 
             if self._model_type in ("keras", "tiny_cnn", "resnet"):
-                # Tiny CNN / Micro ResNet: 9 raw → L1 normalise → reshape (1,3,3,1)
-                if self._scaler is None:
-                    raise ValueError("Scaler not loaded for Keras CNN/ResNet model.")
+                # Tiny CNN / Micro ResNet: 9 raw → L1 normalise (sum-to-1) → reshape (1,3,3,1)
                 raw_2d   = np.array(raw_sensors, dtype=float).reshape(1, 9)
-                scaled   = self._scaler.transform(raw_2d)    # L1 Normalizer
+                sum_val  = np.sum(raw_2d)
+                scaled   = raw_2d / sum_val if sum_val > 0 else raw_2d
                 cnn_in   = scaled.reshape(1, 3, 3, 1)
                 predictions = self._model.predict(cnn_in, verbose=0)[0]
 
@@ -355,7 +354,8 @@ class InferenceEngine:
         model_ok  = self._model_path.exists()
         scaler_ok = True
         
-        if self._model_type in ("keras", "tiny_cnn", "resnet", "fnn"):
+        # Only FNN requires a separate .pkl scaler file
+        if self._model_type == "fnn":
             scaler_ok = self._scaler_path and self._scaler_path.exists()
 
         if not model_ok or not scaler_ok:
@@ -371,11 +371,16 @@ class InferenceEngine:
             return
 
         try:
-            if self._model_type in ("keras", "tiny_cnn", "resnet", "fnn"):
+            if self._model_type == "fnn":
                 import tensorflow as tf
                 self._model  = tf.keras.models.load_model(str(self._model_path), compile=False)
                 self._scaler = joblib.load(str(self._scaler_path))
+            elif self._model_type in ("keras", "tiny_cnn", "resnet"):
+                import tensorflow as tf
+                self._model  = tf.keras.models.load_model(str(self._model_path), compile=False)
+                self._scaler = None  # Stateless L1 normalization is done directly in code
 
+            if self._model_type in ("keras", "tiny_cnn", "resnet", "fnn"):
                 # Detect binary vs multi-class from output shape
                 output_units = self._model.output_shape[-1]
                 if output_units == 1:

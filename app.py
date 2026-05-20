@@ -339,15 +339,12 @@ class FogApplication:
             new_model_path  = data.get("model_path",  "").strip()
             new_scaler_path = data.get("scaler_path", "").strip()
 
-            if new_scaler_path.lower() in ("none", ""):
-                new_scaler_path = ""
-
-            if not new_model_path or (new_model_type in ("keras", "tiny_cnn", "resnet", "fnn") and not new_scaler_path):
+            if not new_model_path or (new_model_type == "fnn" and (not new_scaler_path or new_scaler_path == "none")):
                 logger.error("[HOT-RELOAD] Missing model_path or scaler_path in payload")
                 return
 
             resolved_mp = paths.resolve_model_path(new_model_path)
-            resolved_sp = paths.resolve_model_path(new_scaler_path) if new_scaler_path else ""
+            resolved_sp = paths.resolve_model_path(new_scaler_path) if (new_scaler_path and new_scaler_path != "none") else ""
 
             mp = Path(resolved_mp)
             sp = Path(resolved_sp) if resolved_sp else None

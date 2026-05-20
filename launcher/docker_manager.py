@@ -217,22 +217,78 @@ class DockerManager:
         except Exception as exc:
             self._log(f"❌ Failed to start services: {exc}")
 
+    def _kill_port(self, port: int) -> None:
+        """Force kill any process listening on a specific port."""
+        import signal
+        if sys.platform != "win32":
+            try:
+                result = subprocess.run(["lsof", "-t", f"-i:{port}"], capture_output=True, text=True)
+                if result.returncode == 0:
+                    pids = result.stdout.strip().split("\n")
+                    for pid_str in pids:
+                        if pid_str.strip():
+                            pid = int(pid_str.strip())
+                            if pid != os.getpid():
+                                self._log(f"Force killing process {pid} on port {port}")
+                                os.kill(pid, signal.SIGKILL)
+            except Exception as e:
+                self._log(f"Error killing port {port}: {e}")
+        else:
+            try:
+                result = subprocess.run(["netstat", "-ano"], capture_output=True, text=True)
+                if result.returncode == 0:
+                    for line in result.stdout.split("\n"):
+                        if f":{port}" in line:
+                            parts = line.strip().split()
+                            if len(parts) >= 5:
+                                pid = int(parts[-1])
+                                if pid != os.getpid() and pid > 0:
+                                    self._log(f"Force killing process {pid} on port {port}")
+                                    subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
+            except Exception as e:
+                self._log(f"Error killing port {port}: {e}")
+
     def _do_stop(self) -> None:
         """Run `docker compose down` or terminate native process."""
         try:
             if self._native_mode:
                 if self._native_app_process:
-                    self._native_app_process.terminate()
+                    try:
+                        self._native_app_process.terminate()
+                        self._native_app_process.wait(timeout=1)
+                    except Exception:
+                        try:
+                            self._native_app_process.kill()
+                        except Exception:
+                            pass
                     self._native_app_process = None
                 
                 if self._native_mosquitto_process:
-                    self._native_mosquitto_process.terminate()
+                    try:
+                        self._native_mosquitto_process.terminate()
+                        self._native_mosquitto_process.wait(timeout=1)
+                    except Exception:
+                        try:
+                            self._native_mosquitto_process.kill()
+                        except Exception:
+                            pass
                     self._native_mosquitto_process = None
+                
+                # Force kill any orphaned processes on our ports
+                self._kill_port(8000)
+                self._kill_port(1883)
+                self._kill_port(4040)
                     
                 self._log("🛑 Native Python & Mosquitto services stopped")
             else:
                 self._stop_container_logs()
                 self._run_compose(["down"], stream_log=True)
+                
+                # Also kill any leftover orphaned native processes just in case
+                self._kill_port(8000)
+                self._kill_port(1883)
+                self._kill_port(4040)
+                
                 self._log("🛑 Docker services stopped")
 
             self._stop_ngrok()
