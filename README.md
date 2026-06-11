@@ -1,59 +1,147 @@
-# ErgoVita - Smart Cushion Fog Node
+# ⚙️ Smart Cushion Fog Node
 
-The "Brain" of the Smart Cushion system. This node aggregates raw sensor data from ESP32 edge devices, performs AI-based posture classification using a Keras CNN model, and broadcasts results to the user-facing app and cloud.
+### Ultra-Low Latency Local AI Broker & Inference Engine
 
----
+The "Brain" of the Smart Cushion system. This node operates locally on a PC or Raspberry Pi to aggregate raw sensor data, perform instant AI posture classification, and act as a reliable bridge to the Cloud.
 
-## 📂 Project Documentation
-
-To keep the repository clean, all technical documentation has been moved to the `docs/` folder:
-
-1.  **[Data Structures & Interfaces](docs/DATA_STRUCTURES.md)**: Detailed JSON formats for Cloud, ESP32, and Web App communication.
-2.  **[System Architecture](docs/system_architecture.md)**: Overall system design, AI label classification, and logic flow.
-3.  **[Manual Deployment Guide](docs/MANUAL_DEPLOYMENT_GUIDE.md)**: How to set up the Fog Node on a new machine.
-4.  **[Windows Installation](docs/WINDOWS_INSTALL.md)**: Specific instructions for Windows users.
+<p align="center">
+  <b>Keras CNN Inference ｜ Mosquitto Broker ｜ AWS IoT Bridging ｜ SQLite Caching</b>
+</p>
 
 ---
 
-## 🚀 Quick Start
+## 🔗 Project Links
 
-1.  **Environment**:
-    ```bash
-    cp .env.example .env
-    # Update AWS credentials and initial paths in .env
-    ```
-
-2.  **Requirements**:
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-3.  **Run Launcher (UI)**:
-    ```bash
-    python run_launcher.py
-    ```
+| Item                    | Link                                                                                          |
+| ----------------------- | --------------------------------------------------------------------------------------------- |
+| 🌐 Project Website      | [https://tonguyentanphuong.github.io/smart-cushion-web/](https://github.com/tonguyentanphuong/smart-cushion-web) |
+| ⚙️ Fog Repository       | [https://github.com/MuoiVung/smart-cushion-fog-node](https://github.com/MuoiVung/smart-cushion-fog-node) |
+| 📦 Edge Hardware Repo   | [https://github.com/MuoiVung/smart-cushion-edge](https://github.com/MuoiVung/smart-cushion-edge) |
+| 🧠 AI Training Repo     | [https://github.com/MuoiVung/smart-cushion-AI](https://github.com/MuoiVung/smart-cushion-AI)     |
+| ⚙️ Main Architecture    | [https://github.com/MuoiVung/smart-cushion](https://github.com/MuoiVung/smart-cushion)            |
 
 ---
 
-## ✨ New Features (May 2026)
+## 📌 Project Overview
 
-### 🔥 AI Hot-Reload
-Change AI models on the fly without restarting the Fog Node or Docker containers.
-- **Auto-Detection**: When you select a `.h5` model, the Launcher automatically finds the matching `.pkl` scaler.
-- **MQTT Trigger**: Updates are pushed to the running engine in ~2 seconds.
+The Fog Node exists to solve the fundamental latency and privacy issues associated with Cloud AI. 
 
-### 📦 Local SQLite Persistence
-A new `data/fog_local.db` file stores:
-- **Config Store**: AI model paths are now saved in a database, making `.env` safer from manual errors.
-- **Offline Cloud Queue**: If the internet goes down, AWS IoT events are buffered locally and automatically retried when connectivity is restored.
+Sending continuous raw analog sensor data to the AWS cloud for real-time inference introduces noticeable network delay and incurs massive API costs. Instead, the Fog Node runs a local **Keras Convolutional Neural Network (CNN)**. It receives 9 ADC values from the ESP32 via local MQTT, normalizes them, and predicts 1 of 9 postures in **under 50ms**. 
+
+It also manages local state logic: if a bad posture is sustained, it sends an immediate vibration command back to the edge. When the user stands up, it aggregates the entire session and uploads a lightweight summary to AWS IoT Core.
+
+This project includes:
+* 🧠 **AI Engine** — Hot-reloadable Keras inference pipeline.
+* 📡 **MQTT Brokerage** — Local Eclipse Mosquitto management.
+* 💾 **Offline Queuing** — SQLite buffering for when internet connectivity drops.
+* 🖥️ **Launcher GUI** — Tkinter interface for easy model swapping.
+
+---
+
+## 🛠️ Technology Stack
+
+| Layer              | Tools / Components                             |
+| ------------------ | ---------------------------------------------- |
+| Core Language      | Python 3.9+                                    |
+| AI Engine          | TensorFlow / Keras, Scikit-Learn (`.pkl` scaler) |
+| Local Broker       | Eclipse Mosquitto (MQTT)                       |
+| Database           | SQLite (`fog_local.db` for offline queuing)    |
+| WebSockets         | `websockets` / `asyncio`                       |
+| Cloud Integration  | AWS IoT Core (boto3, AWSIoTPythonSDK)          |
+| Containerization   | Docker, Docker Compose                         |
 
 ---
 
-## 🧠 AI Pipeline
--   **Model**: Keras CNN 2D (Processes 3x3 FSR matrix).
--   **Inputs**: 9 raw ADC values (0–4095) from FSR sensors.
--   **Normalization**: Handled by an `sklearn` MinMaxScaler (.pkl) inside the engine.
--   **Labels**: Detects 9-11 postures including `Empty`, `Object`, and specific leanings.
+## 💡 Motivation
+
+Why use a Fog Node instead of sending data directly from the ESP32 to AWS?
+
+| Problem                      | Cloud-Only Solution | Fog-Enabled Solution (Ours) |
+| ---------------------------- | ------------------- | --------------------------- |
+| **Latency**                  | ~500ms delay over Wi-Fi/4G | **<50ms delay** on local network |
+| **Privacy**                  | Raw weight distributions stored online | Only high-level summaries go online |
+| **Cost**                     | Paying AWS for 10 requests per second | Paying AWS for 1 request per session |
+| **Offline Reliability**      | Vibration motor fails if Wi-Fi drops | Local inference continues working offline |
 
 ---
-© 2026 ErgoVita Team
+
+## 🧩 System Architecture (Fog)
+
+### Internal Workflow
+
+| Phase       | Action                                                       |
+| ----------- | --------------------------------------------------------------- |
+| **1. Ingestion**| `mqtt_handler.py` receives UDP/MQTT payloads from the ESP32. |
+| **2. Scaling**  | Raw values (0-4095) are scaled to (0.0-1.0) using Scikit-Learn. |
+| **3. Inference**| The Keras `.h5` model classifies the 3x3 matrix as an "image" into 9 states. |
+| **4. Feedback** | If state == "Bad Posture" for >30s, publish vibration payload to `cushion/command`. |
+| **5. Broadcast**| `websocket_server.py` pushes real-time state to the local React App. |
+| **6. Upload**   | When the session ends, `aws_iot_handler.py` pushes a summary to AWS via TLS. |
+
+---
+
+## 🗂️ Repository Structure
+
+```text
+smart-cushion-fog-node/
+│
+├── README.md
+├── .env.example
+├── requirements.txt
+├── docker-compose.yml       (Optional containerized deployment)
+│
+├── app.py                   (Main event loop and initialization)
+├── run_launcher.py          (Tkinter GUI for easy launching and model selection)
+│
+├── core/
+│   ├── mqtt_handler.py      (Local ESP32 communication)
+│   └── aws_iot_handler.py   (AWS IoT Cloud communication)
+├── ai/                      (Inference engine and model loading)
+├── config/                  (Environment and SQLite DB setup)
+├── data/                    (Local SQLite storage for offline buffering)
+└── models/                  (Directory for .h5 weights and .pkl scalers)
+```
+
+---
+
+## 🚀 Deployment Guide
+
+### 1. Prerequisites
+- **Python 3.9+** installed.
+- **Mosquitto MQTT Broker**: 
+  - Windows: [mosquitto.org](https://mosquitto.org/download/)
+  - Mac: `brew install mosquitto`
+
+### 2. Environment Setup
+1. Clone the repo and create a virtual environment:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+2. Install requirements:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Copy `.env.example` to `.env` and configure your IPs. Ensure `MQTT_BROKER_IP` is `localhost`.
+
+### 3. Running the Fog Node
+1. Ensure the Mosquitto broker is running in the background.
+2. Launch the GUI:
+   ```bash
+   python run_launcher.py
+   ```
+3. Select your desired `.h5` model and `.pkl` scaler from the dropdown.
+4. Click **Start Fog Engine**.
+
+---
+
+## 👥 Team Members & Roles
+
+| Member | Role                                  | Responsibility                                                                                                                                               |
+| ------ | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Tran Viet Nam** | Fog & Hardware Integration | Architecting the Fog node broker, MQTT communication, local SQLite caching, system integration, and bridging hardware with cloud services. |
+
+---
+
+## 🎯 Conclusion
+The Fog Layer guarantees a real-time, responsive user experience. By caching events locally in SQLite during internet outages and processing complex AI locally, the system ensures reliable haptic feedback regardless of cloud connectivity, protecting user privacy while drastically reducing cloud computing costs.
