@@ -133,13 +133,6 @@ smart-cushion-fog-node/
 3. Select your desired `.h5` model and `.pkl` scaler from the dropdown.
 4. Click **Start Fog Engine**.
 
----
-
-## 👥 Team Members & Roles
-
-| Member | Role                                  | Responsibility                                                                                                                                               |
-| ------ | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Tran Viet Nam** | Fog & Hardware Integration | Architecting the Fog node broker, MQTT communication, local SQLite caching, system integration, and bridging hardware with cloud services. |
 
 ---
 
